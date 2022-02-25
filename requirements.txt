@@ -1,3 +1,4 @@
 nilabels>=0.0.8
 numpy>=1.22.0
 matplotlib>=3.5.1
+plotly>=5.6.0
