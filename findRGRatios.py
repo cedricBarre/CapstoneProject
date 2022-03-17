@@ -8,10 +8,11 @@ import os
 import shutil
 
 # Global variable declaration
-OUTPUT_DIR = "output/"
+OUTPUT_DIR = "output"
 MINC_FILES_DIR = "output/minc_files"
 NIFTI_FILES_DIR = "output/nifti_files"
 MASK_FILES_DIR = "output/masks"
+MASK_REFERENCE_FILE = "output/nifti_files/PDw_RG_101.nii.gz"
 
 def findRatios():
     data = []
@@ -22,10 +23,10 @@ def findRatios():
         for row in reader:
             dataRow = [ row['file_name'], float(row['rg_value']), [], [], [] ]
             data.append(dataRow)
-    
+
     if(len(data) == 0):
         return
-    
+
     # Extract the array from the nifti file
     idx = 0
     for d in data:
@@ -34,7 +35,7 @@ def findRatios():
         data[idx][3] = img.header
         data[idx][4] = img.affine
         idx += 1
-    
+
     # Average out the scans with the same RG values
     avgData = [ [ 101, np.zeros(data[0][2].shape), 0, [], [], [], 0 ], [ 50.8, np.zeros(data[0][2].shape), 0, [], [], [], 0 ] ]
         # Can add more elements to the array for the other possible RG gain values that we encounter
@@ -51,7 +52,7 @@ def findRatios():
             # Store latest header and affine for RG
             avgData[1][3] = d[3]
             avgData[1][4] = d[4]
-        
+
     idx = 0
     for rg in avgData:
         avgData[idx][1] = rg[1]/rg[2]
@@ -67,40 +68,34 @@ def findRatios():
         nb.save(scan, os.path.join(NIFTI_FILES_DIR, "PDw_RG_{}.nii.gz".format(str(d[0]).replace('.', '_'))))
 
     # Call segmentation script to remove the background of the scan
-    p = subprocess.Popen("./segmentBrain.sh {} {} {}".format(NIFTI_FILES_DIR, MINC_FILES_DIR, OUTPUT_DIR), 
+    p = subprocess.Popen("./segmentBrain.sh {} {} {}".format(MASK_REFERENCE_FILE, MINC_FILES_DIR, OUTPUT_DIR),
                             shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     while(p.poll() is None):
         line = p.stdout.readline().decode('utf-8')
         if(len(line) != 0):
             print(line)
-    
-    # Load newly created masks for each 
-    for file in os.listdir(MASK_FILES_DIR):
-        if(file.find("101") > 0):
-            avgData[0][5] = np.asarray(nb.load("output/masks/{}".format(file)).dataobj)
-        elif(file.find("50_8") > 0):
-            avgData[1][5] = np.asarray(nb.load("output/masks/{}".format(file)).dataobj)
-        else:
-            print("Failed to identify the RG of this mask file: {}".format(file))
-    
+
+    # Load newly created mask
+    mask = np.asarray(nb.load((MASK_FILES_DIR + "/PDw_mask.nii.gz")).dataobj)
+
     # Calculate the ratios
     idx = 0
     for d in avgData:
-        avgData[idx][6] = np.mean(np.multiply(d[1], d[5]))
+        avgData[idx][6] = np.mean(d[1][mask.astype(bool)])
         idx += 1
-    
+
     # Print results
     print("+------------+------------+------------+------------+------------+\n" +
           "|  101/90.5  |  101/80.6  |  101/71.8  |  101/64.0  |  101/50.8  |\n" +
           "+------------+------------+------------+------------+------------+\n" +
-          "|    {}     |    {}     |    {}     |    {}     |  {:.8f}  |\n".format(
+          "|    {}     |    {}     |    {}     |    {}     |  {:.6f}  |\n".format(
                                                                             "N/A",
                                                                             "N/A",
                                                                             "N/A",
                                                                             "N/A",
-                                                                            round((avgData[0][6]/avgData[1][6]), 8)) +
+                                                                            round((avgData[0][6]/avgData[1][6]), 6)) +
           "+------------+------------+------------+------------+------------+")
-    
+
 
 
 #########
