@@ -37,7 +37,9 @@ def findRatios():
         idx += 1
 
     # Average out the scans with the same RG values
-    avgData = [ [ 101, np.zeros(data[0][2].shape), 0, [], [], [], 0 ], [ 50.8, np.zeros(data[0][2].shape), 0, [], [], [], 0 ] ]
+    avgData = [ [ 101, np.zeros(data[0][2].shape), 0, [], [], [], 0 ], [ 50.8, np.zeros(data[0][2].shape), 0, [], [], [], 0 ],
+                [ 64, np.zeros(data[0][2].shape), 0, [], [], [], 0 ], [ 71.8, np.zeros(data[0][2].shape), 0, [], [], [], 0 ],
+                [ 80.6, np.zeros(data[0][2].shape), 0, [], [], [], 0 ], [ 90.5, np.zeros(data[0][2].shape), 0, [], [], [], 0 ] ]
         # Can add more elements to the array for the other possible RG gain values that we encounter
     for d in data:
         if( d[1] == 101.0 ):
@@ -52,6 +54,30 @@ def findRatios():
             # Store latest header and affine for RG
             avgData[1][3] = d[3]
             avgData[1][4] = d[4]
+        elif( d[1] == 64 ):
+            avgData[2][1] = np.add(avgData[2][1], d[2])
+            avgData[2][2] += 1
+            # Store latest header and affine for RG
+            avgData[2][3] = d[3]
+            avgData[2][4] = d[4]
+        elif( d[1] == 71.8 ):
+            avgData[3][1] = np.add(avgData[3][1], d[2])
+            avgData[3][2] += 1
+            # Store latest header and affine for RG
+            avgData[3][3] = d[3]
+            avgData[3][4] = d[4]
+        elif( d[1] == 80.6 ):
+            avgData[4][1] = np.add(avgData[4][1], d[2])
+            avgData[4][2] += 1
+            # Store latest header and affine for RG
+            avgData[4][3] = d[3]
+            avgData[4][4] = d[4]
+        elif( d[1] == 90.5 ):
+            avgData[5][1] = np.add(avgData[5][1], d[2])
+            avgData[5][2] += 1
+            # Store latest header and affine for RG
+            avgData[5][3] = d[3]
+            avgData[5][4] = d[4]
 
     idx = 0
     for rg in avgData:
@@ -88,11 +114,11 @@ def findRatios():
     print("+------------+------------+------------+------------+------------+\n" +
           "|  101/90.5  |  101/80.6  |  101/71.8  |  101/64.0  |  101/50.8  |\n" +
           "+------------+------------+------------+------------+------------+\n" +
-          "|    {}     |    {}     |    {}     |    {}     |  {:.6f}  |\n".format(
-                                                                            "N/A",
-                                                                            "N/A",
-                                                                            "N/A",
-                                                                            "N/A",
+          "|  {:.6f}  |  {:.6f}  |  {:.6f}  |  {:.6f}  |  {:.6f}  |\n".format(
+                                                                            round((avgData[0][6]/avgData[5][6]), 6),
+                                                                            round((avgData[0][6]/avgData[4][6]), 6),
+                                                                            round((avgData[0][6]/avgData[3][6]), 6),
+                                                                            round((avgData[0][6]/avgData[2][6]), 6),
                                                                             round((avgData[0][6]/avgData[1][6]), 6)) +
           "+------------+------------+------------+------------+------------+")
 

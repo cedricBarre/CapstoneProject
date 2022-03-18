@@ -23,7 +23,7 @@ scan_name="${scan_name%%.*}" # Remove nifti extension
 minc_file="$scan_name.mnc" # Remove nifti extension
 nii2mnc -noscanrange $mask_reference_file_path ./$minc_files_path/$minc_file
 
-./mouse-preprocessing-N4corr.sh $output_path/minc_files/$minc_file.mnc $output_path/n4_bias_corrected/"$scan_name"_N4corr.mnc
+./mouse-preprocessing-N4corr.sh $output_path/minc_files/$minc_file $output_path/n4_bias_corrected/"$scan_name"_N4corr.mnc
 
 ./antsRegistration_affine_SyN.sh $output_path/n4_bias_corrected/"$scan_name"_N4corr.mnc $atlas_for_reg $atlas_mask $output_path/transforms_from_subject_to_atlas/$scan_name-registered_to_atlas
 
