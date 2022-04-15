@@ -12,26 +12,54 @@ atlas_full_mask="/data/chamal/projects/mila/2019_MTR_on_Cryoprobe/resources_tiss
 mask_reference_file_path="$1"
 minc_files_path="$2"
 output_path="$3"
+mask_file="$4"
 
-mkdir -p $output_path/transforms_from_subject_to_atlas
-mkdir -p $output_path/n4_bias_corrected
-mkdir -p $output_path/masks
+if [ -z $mask_file ]; then 
 
-# Transform each nifti file and create the masks
-scan_name="$(basename -- $mask_reference_file_path)" # Extract basename
-scan_name="${scan_name%%.*}" # Remove nifti extension
-minc_file="$scan_name.mnc" # Remove nifti extension
-nii2mnc -noscanrange $mask_reference_file_path ./$minc_files_path/$minc_file
+   # Transform each nifti file and create the masks
+   scan_name="$(basename -- $mask_reference_file_path)" # Extract basename
+   scan_name="${scan_name%%.*}" # Remove nifti extension
+   minc_file="$scan_name.mnc" # Remove nifti extension
+   nii2mnc -noscanrange $mask_reference_file_path ./$minc_files_path/$minc_file
 
-./mouse-preprocessing-N4corr.sh $output_path/minc_files/$minc_file $output_path/n4_bias_corrected/"$scan_name"_N4corr.mnc
+   ./mouse-preprocessing-N4corr.sh $output_path/minc_files/$minc_file $output_path/n4_bias_corrected/"$scan_name"_N4corr.mnc
 
-./antsRegistration_affine_SyN.sh $output_path/n4_bias_corrected/"$scan_name"_N4corr.mnc $atlas_for_reg $atlas_mask $output_path/transforms_from_subject_to_atlas/$scan_name-registered_to_atlas
+   ./antsRegistration_affine_SyN.sh $output_path/n4_bias_corrected/"$scan_name"_N4corr.mnc $atlas_for_reg $atlas_mask $output_path/transforms_from_subject_to_atlas/$scan_name-registered_to_atlas
 
-antsApplyTransforms -d 3 -i $atlas_mask \
-   -t [$output_path/transforms_from_subject_to_atlas/$scan_name-registered_to_atlas_output_0_GenericAffine.xfm,1] \
-   -t $output_path/transforms_from_subject_to_atlas/$scan_name-registered_to_atlas_output_1_inverse_NL.xfm -n GenericLabel \
-   -o $output_path/masks/PDw_mask.mnc --verbose \
-	 -r $output_path/n4_bias_corrected/"$scan_name"_N4corr.mnc
+   # rm $output_path/masks/*
 
-mnc2nii $output_path/masks/PDw_mask.mnc $output_path/masks/PDw_mask.nii
-gzip $output_path/masks/PDw_mask.nii
+   antsApplyTransforms -d 3 -i $atlas_mask \
+      -t [$output_path/transforms_from_subject_to_atlas/$scan_name-registered_to_atlas_output_0_GenericAffine.xfm,1] \
+      -t $output_path/transforms_from_subject_to_atlas/$scan_name-registered_to_atlas_output_1_inverse_NL.xfm -n GenericLabel \
+      -o $output_path/masks/PDw_mask.mnc --verbose \
+      -r $output_path/n4_bias_corrected/"$scan_name"_N4corr.mnc
+
+   mnc2nii $output_path/masks/PDw_mask.mnc $output_path/masks/PDw_mask.nii
+   gzip $output_path/masks/PDw_mask.nii
+
+   mask_file="$output_path/masks/PDw_mask.mnc"
+fi
+
+# Make sure the mask has .mnc extension
+if [ "${mask_file##*.}" != "mnc" ] ; then
+   new_mask_file="${mask_file%%.*}".mnc
+   nii2mnc -noscanrange $mask_file $new_mask_file
+   mask_file=$new_mask_file
+fi
+
+# Apply denoising on every scan in every directory
+for sorted_dir in $output_path/nifti_files/*/ ; do
+   for nifti_file in $(find ./$sorted_dir -type f -name "*.nii.gz")
+   do
+      rg_value="$(basename $sorted_dir)"
+      scan_name="$(basename -- $nifti_file)" # Extract basename
+      scan_name="${scan_name%%.*}" # Remove nifti extension
+      minc_file="$scan_name.mnc" # Remove nifti extension
+      nii2mnc -noscanrange $nifti_file ./$minc_files_path/$minc_file
+
+      DenoiseImage -d 3 -i $minc_files_path/$minc_file -n Rician -x $mask_file --verbose -o $output_path/minc_files/denoised_$minc_file
+
+      mnc2nii $output_path/minc_files/denoised_$minc_file $output_path/denoised/$rg_value/$scan_name.nii
+      gzip $output_path/denoised/$rg_value/$scan_name.nii
+   done
+done
