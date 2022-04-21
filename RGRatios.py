@@ -21,7 +21,7 @@ BIAS_CORRECTED_DIR = "output/n4_bias_corrected"
 def findRatios(maskfile):
     data = {}
 
-    # buildOutputDir()
+    buildOutputDir()
 
     # Set up the scan data list
     with open('scans.csv', newline='') as scanfile:
@@ -79,7 +79,7 @@ def findRatios(maskfile):
     
     # Print results
     print("+---------------+------------+------------+------------+------------+------------+\n" +
-          "|               |  101/90.5  |  101/80.6  |  101/71.8  |  101/64.0  |  101/50.8  |\n" +
+          "|   RG ratios   |  101/90.5  |  101/80.6  |  101/71.8  |  101/64.0  |  101/50.8  |\n" +
           "+---------------+------------+------------+------------+------------+------------+\n" +
           "|   First Pair  |  {:.6f}  |  {:.6f}  |  {:.6f}  |  {:.6f}  |  {:.6f}  |\n".format(
                                                                             round(ratio_data[0][0], 6),
@@ -109,29 +109,58 @@ def findRatios(maskfile):
                                                                             round(average_data[3], 6),
                                                                             round(average_data[4], 6)) +
           "+---------------+------------+------------+------------+------------+------------+")
+    
+    # Prepare the plot of the intensity ratios to the expected RG ratios
+    x = ['101/50.8', '101/64', '101/71.8', '101/80.6', '101/90.5']
+    y = np.flip(np.asarray(ratio_data), axis=0)
+    y1 = y.T[0]
+    y2 = y.T[1]
+    y3 = y.T[2]
+    fig = plt.figure(1, figsize=(10, 6))
+    xscale = np.array([0, 1, 2, 3, 4])
+    plt.yticks(np.arange(0.95, 2.2, 0.05))
+    plt.xticks(xscale, x)
+    p = plt.plot(x, y1, 'ko', linestyle="None")
+    p = plt.plot(x, y2, 'ko', linestyle="None")
+    p = plt.plot(x, y3, 'ko', linestyle="None")
+    plt.xlabel("RG Ratios")
+    plt.ylabel("Ratio of experimentally obtained intensities\nto the expected ratio of RG values")
+    plt.grid()
+    plt.savefig(OUTPUT_DIR + "/intensity_ratio_pairs_plot.jpg")
+
+    # Prepare the plot of average of the intensity ratios to the expected RG ratios
+    fig = plt.figure(2, figsize=(10, 6))
+    # Calculate error as standard deviation of the 3 data points divided by the square root of the amount of data points (3)
+    error = [ np.std(ratio_data[4]) / math.sqrt(len(ratio_data[4])), np.std(ratio_data[3]) / math.sqrt(len(ratio_data[3])), 
+                np.std(ratio_data[2]) / math.sqrt(len(ratio_data[2])), np.std(ratio_data[1]) / math.sqrt(len(ratio_data[1])), 
+                np.std(ratio_data[0]) / math.sqrt(len(ratio_data[0])) ]
+    plt.yticks(np.arange(0.95, 2.2, 0.05))
+    plt.xticks(xscale, x)
+    p = plt.errorbar(x, np.flip(average_data, axis=0), yerr=error, fmt='o')
+    plt.xlabel("RG Ratios")
+    plt.ylabel("Average of the ratios of experimentally obtained\nintensities to the expected ratio of RG values")
+    plt.grid()
+    plt.savefig(OUTPUT_DIR + "/avg_intensity_ratio_plot.jpg")
 
     # Plot the pair data points
-    x = ['101/50.8', '101/64', '101/71.8', '101/80.6', '101/90.5']
     y = np.asarray([ratio_data[4] / (101/50.8), ratio_data[3] / (101/64), ratio_data[2] / (101/71.8), 
             ratio_data[1] / (101/80.6), ratio_data[0] / (101/90.5) ])
     y1 = y.T[0]
     y2 = y.T[1]
     y3 = y.T[2]
     fig = plt.figure(3, figsize=(10, 6))
-    xscale = np.array([0, 1, 2, 3, 4])
     plt.yticks(np.arange(0.95, 1.2, 0.01))
     plt.xticks(xscale, x)
     p = plt.plot(x, y1, 'ko', linestyle="None")
     p = plt.plot(x, y2, 'ko', linestyle="None")
     p = plt.plot(x, y3, 'ko', linestyle="None")
     plt.xlabel("RG Ratios")
-    plt.ylabel("Mean intensity values normalized by the expected RG values")
+    plt.ylabel("Ratio of experimentally obtained RG ratios to the expected ratio of RG values")
     plt.grid()
     plt.savefig(OUTPUT_DIR + "/ratio_pair_plot.jpg")
 
     # Prepare the final plot
     fig = plt.figure(4, figsize=(10, 6))
-    xscale = np.array([0, 1, 2, 3, 4])
     # Calculate error as standard deviation of the 3 data points divided by the square root of the amount of data points (3)
     error = [ np.std(y[0]) / math.sqrt(len(y[0])), np.std(y[1]) / math.sqrt(len(y[1])), 
                 np.std(y[2]) / math.sqrt(len(y[2])), np.std(y[3]) / math.sqrt(len(y[3])), 
@@ -140,7 +169,7 @@ def findRatios(maskfile):
     plt.xticks(xscale, x)
     p = plt.errorbar(x, np.mean(y, axis=1), yerr=error, fmt='o')
     plt.xlabel("RG Ratios")
-    plt.ylabel("Mean intensity values normalized by the expected RG values")
+    plt.ylabel("Average of the ratios of experimentally obtained\nRG ratios to the expected ratio of RG values")
     plt.grid()
     plt.savefig(OUTPUT_DIR + "/final_ratio_plot.jpg")
 
