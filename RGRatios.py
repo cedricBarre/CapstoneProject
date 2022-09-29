@@ -7,6 +7,7 @@ import subprocess
 import os
 import shutil
 import sys
+import math
 
 # Global variable declaration
 OUTPUT_DIR = "output"
@@ -20,125 +21,157 @@ BIAS_CORRECTED_DIR = "output/n4_bias_corrected"
 def findRatios(maskfile):
     data = {}
 
-    # buildOutputDir()
+    buildOutputDir()
 
-    # # Set up the scan data list
-    # with open('scans.csv', newline='') as scanfile:
-    #     reader = csv.DictReader(scanfile)
-    #     for row in reader:
-    #         # dataRow = [ row['file_name'], float(row['rg_value']), [], [], [] ]
-    #         shutil.copy(row['file_name'], NIFTI_FILES_DIR + '/' + row['rg_value'].replace('.', '_'))
-    #         data[row['rg_value']] = [ [], [], 0]
-    #         # data.append(dataRow)
-    
-    # if 1:
-    #     print("done")
-    #     return
-
-    # if(len(data) == 0):
-    #     return
-
-    # Extract the array from the nifti file
-    # idx = 0
-    # for d in data:
-    #     img = nb.load(d[0])
-    #     data[idx][2] = np.asarray(img.dataobj)
-    #     data[idx][3] = img.header
-    #     data[idx][4] = img.affine
-    #     idx += 1
-
-    # Average out the scans with the same RG values
-    # avgData = [ [ 101, np.zeros(data[0][2].shape), 0 ], [ 50.8, np.zeros(data[0][2].shape), 0 ],
-    #             [ 64, np.zeros(data[0][2].shape), 0 ], [ 71.8, np.zeros(data[0][2].shape), 0 ],
-    #             [ 80.6, np.zeros(data[0][2].shape), 0 ], [ 90.5, np.zeros(data[0][2].shape), 0 ] ]
-    
-    #  for d in data:
-    #     if( d[1] == 101.0 ):
-    #         avgData[0][1] = np.add(avgData[0][1], d[2])
-    #         avgData[0][2] += 1
-    #         # Store latest header and affine for RG
-    #         avgData[0][3] = d[3]
-    #         avgData[0][4] = d[4]
-    #     elif( d[1] == 50.8 ):
-    #         avgData[1][1] = np.add(avgData[1][1], d[2])
-    #         avgData[1][2] += 1
-    #         # Store latest header and affine for RG
-    #         avgData[1][3] = d[3]
-    #         avgData[1][4] = d[4]
-    #     elif( d[1] == 64 ):
-    #         avgData[2][1] = np.add(avgData[2][1], d[2])
-    #         avgData[2][2] += 1
-    #         # Store latest header and affine for RG
-    #         avgData[2][3] = d[3]
-    #         avgData[2][4] = d[4]
-    #     elif( d[1] == 71.8 ):
-    #         avgData[3][1] = np.add(avgData[3][1], d[2])
-    #         avgData[3][2] += 1
-    #         # Store latest header and affine for RG
-    #         avgData[3][3] = d[3]
-    #         avgData[3][4] = d[4]
-    #     elif( d[1] == 80.6 ):
-    #         avgData[4][1] = np.add(avgData[4][1], d[2])
-    #         avgData[4][2] += 1
-    #         # Store latest header and affine for RG
-    #         avgData[4][3] = d[3]
-    #         avgData[4][4] = d[4]
-    #     elif( d[1] == 90.5 ):
-    #         avgData[5][1] = np.add(avgData[5][1], d[2])
-    #         avgData[5][2] += 1
-    #         # Store latest header and affine for RG
-    #         avgData[5][3] = d[3]
-    #         avgData[5][4] = d[4]
+    # Set up the scan data list
+    with open('scans.csv', newline='') as scanfile:
+        reader = csv.DictReader(scanfile)
+        for row in reader:
+            shutil.copy(row['file_name'], NIFTI_FILES_DIR + '/' + row['rg_value'].replace('.', '_'))
+            data[row['rg_value']] = [ [], []]
 
     # Call segmentation script to remove the background of the scan
-    # mask_reference_file = os.listdir(NIFTI_FILES_DIR + "/101")[0] # Choose one RG 101 file to be the reference for the mask creation
-    # existing_mask = '' if maskfile == None else maskfile # Will bypass mask creation if a mask file is supplied already
-    # p = subprocess.Popen("./segmentBrain.sh {} {} {} {}".format(mask_reference_file, MINC_FILES_DIR, OUTPUT_DIR, existing_mask),
-    #                         shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    # while(p.poll() is None):
-    #     line = p.stdout.readline().decode('utf-8')
-    #     if(len(line) != 0):
-    #         print(line)
+    mask_reference_file = os.listdir(NIFTI_FILES_DIR + "/101")[0] # Choose one RG 101 file to be the reference for the mask creation
+    mask_reference_file = os.path.join(NIFTI_FILES_DIR + "/101", mask_reference_file)
+    existing_mask = '' if maskfile == None else maskfile # Will bypass mask creation if a mask file is supplied already
+    p = subprocess.Popen("./segmentBrain.sh {} {} {} {}".format(mask_reference_file, MINC_FILES_DIR, OUTPUT_DIR, existing_mask),
+                            shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    while(p.poll() is None):
+        line = p.stdout.readline().decode('utf-8')
+        if(len(line) != 0):
+            print(line)
 
     # Load mask
     mask = np.asarray(nb.load((MASK_FILES_DIR + "/PDw_mask.nii.gz") if maskfile == None else maskfile).dataobj)
 
+    # Get all directories in the denoised directory since the denoised scans are sorted in directories correpsonding to their rg value
     for sorted_dir in os.listdir(DENOISED_FILES_DIR):
-        if os.path.isdir(sorted_dir):
-            scan_list = os.listdir(sorted_dir)
+        sorted_dir_path = os.path.join(DENOISED_FILES_DIR, sorted_dir)
+        if os.path.isdir(sorted_dir_path):
+            # Get all the scan file names in each sorted directory
+            scan_list = os.listdir(sorted_dir_path)
             scan_amount = len(scan_list)
-            rg = os.path.basename(os.path.normpath(sorted_dir)).replace("_", ".")
-            datarow = data[rg]
-            datarow[0] = np.zeros((scan_amount, mask.shape[0], mask.shape[1], mask.shape[2]))
-            datarow[1] = [0] * scan_amount
+            rg = os.path.basename(os.path.normpath(sorted_dir)).replace("_", ".") # Get RG value from directory
+            datarow = data[rg] # Access the right key in the directory depending on the RG value
+            # Create numpy array to hold all scans (useful if we want to print any of the scans later, not used for now)
+            datarow[0] = np.zeros((scan_amount, mask.shape[0], mask.shape[1], mask.shape[2])) 
+            datarow[1] = [0] * scan_amount # Create array to hold mean intensity for each scan
             idx = 0
+            # For each scan in the directory...
             for denoised_scan in scan_list:
-                scan_array = np.asarray(nb.load(denoised_scan).dataobj)
+                file_path = os.path.join(sorted_dir_path, denoised_scan)
+                scan_array = np.asarray(nb.load(file_path).dataobj) # Load the scan as a numpy array
+                # Save in the array of scan array (useful if we want to print any of the scans later, not used for now)
                 datarow[0][idx, :, :, :] = scan_array
-                datarow[1][idx] = np.mean(scan_array[mask.astype(bool)])
-            datarow[2] = np.mean(datarow[1][idx])
-            data[rg] = datarow
-
-
+                datarow[1][idx] = np.mean(scan_array[mask.astype(bool)]) # Calculate the mean of all voxels inside the brain
+                idx = idx + 1
+            data[rg] = datarow # Save value of the RG key in the dictionary 
     
+    # Calculate the ratio for each pair of RG with the reference RG of 101. Here we assume that each RG value has the
+    # same amount of scans so we can use np.divide to divide the arrays containing the mean intensities for each scan
+    # of each RG value
+    ratio_data = [ np.divide(data["101"][1], data["90.5"][1]), np.divide(data["101"][1], data["80.6"][1]), 
+                    np.divide(data["101"][1], data["71.8"][1]), np.divide(data["101"][1], data["64"][1]), 
+                    np.divide(data["101"][1], data["50.8"][1]) ]
+    
+    average_data = [ np.mean(ratio_data[0]), np.mean(ratio_data[1]), np.mean(ratio_data[2]),
+                        np.mean(ratio_data[3]), np.mean(ratio_data[4]) ]
+    
+    # Print results
+    print("+---------------+------------+------------+------------+------------+------------+\n" +
+          "|   RG ratios   |  101/90.5  |  101/80.6  |  101/71.8  |  101/64.0  |  101/50.8  |\n" +
+          "+---------------+------------+------------+------------+------------+------------+\n" +
+          "|   First Pair  |  {:.6f}  |  {:.6f}  |  {:.6f}  |  {:.6f}  |  {:.6f}  |\n".format(
+                                                                            round(ratio_data[0][0], 6),
+                                                                            round(ratio_data[1][0], 6),
+                                                                            round(ratio_data[2][0], 6),
+                                                                            round(ratio_data[3][0], 6),
+                                                                            round(ratio_data[4][0], 6)) +
+          "+---------------+------------+------------+------------+------------+------------+\n" +
+          "|  Second Pair  |  {:.6f}  |  {:.6f}  |  {:.6f}  |  {:.6f}  |  {:.6f}  |\n".format(
+                                                                            round(ratio_data[0][1], 6),
+                                                                            round(ratio_data[1][1], 6),
+                                                                            round(ratio_data[2][1], 6),
+                                                                            round(ratio_data[3][1], 6),
+                                                                            round(ratio_data[4][1], 6)) +
+          "+---------------+------------+------------+------------+------------+------------+\n" +
+          "|   Third Pair  |  {:.6f}  |  {:.6f}  |  {:.6f}  |  {:.6f}  |  {:.6f}  |\n".format(
+                                                                            round(ratio_data[0][2], 6),
+                                                                            round(ratio_data[1][2], 6),
+                                                                            round(ratio_data[2][2], 6),
+                                                                            round(ratio_data[3][2], 6),
+                                                                            round(ratio_data[4][2], 6)) +
+          "+---------------+------------+------------+------------+------------+------------+\n" +
+          "|    Average    |  {:.6f}  |  {:.6f}  |  {:.6f}  |  {:.6f}  |  {:.6f}  |\n".format(
+                                                                            round(average_data[0], 6),
+                                                                            round(average_data[1], 6),
+                                                                            round(average_data[2], 6),
+                                                                            round(average_data[3], 6),
+                                                                            round(average_data[4], 6)) +
+          "+---------------+------------+------------+------------+------------+------------+")
+    
+    # Prepare the plot of the intensity ratios to the expected RG ratios
+    x = ['101/50.8', '101/64', '101/71.8', '101/80.6', '101/90.5']
+    y = np.flip(np.asarray(ratio_data), axis=0)
+    y1 = y.T[0]
+    y2 = y.T[1]
+    y3 = y.T[2]
+    fig = plt.figure(1, figsize=(10, 6))
+    xscale = np.array([0, 1, 2, 3, 4])
+    plt.yticks(np.arange(0.95, 2.2, 0.05))
+    plt.xticks(xscale, x)
+    p = plt.plot(x, y1, 'ko', linestyle="None")
+    p = plt.plot(x, y2, 'ko', linestyle="None")
+    p = plt.plot(x, y3, 'ko', linestyle="None")
+    plt.xlabel("RG Ratios")
+    plt.ylabel("Ratio of experimentally obtained intensities\nto the expected ratio of RG values")
+    plt.grid()
+    plt.savefig(OUTPUT_DIR + "/intensity_ratio_pairs_plot.jpg")
 
-    # # Calculate the ratios
-    # idx = 0
-    # for d in avgData:
-    #     avgData[idx][6] = np.mean(d[1][mask.astype(bool)])
-    #     idx += 1
+    # Prepare the plot of average of the intensity ratios to the expected RG ratios
+    fig = plt.figure(2, figsize=(10, 6))
+    # Calculate error as standard deviation of the 3 data points divided by the square root of the amount of data points (3)
+    error = [ np.std(ratio_data[4]) / math.sqrt(len(ratio_data[4])), np.std(ratio_data[3]) / math.sqrt(len(ratio_data[3])), 
+                np.std(ratio_data[2]) / math.sqrt(len(ratio_data[2])), np.std(ratio_data[1]) / math.sqrt(len(ratio_data[1])), 
+                np.std(ratio_data[0]) / math.sqrt(len(ratio_data[0])) ]
+    plt.yticks(np.arange(0.95, 2.2, 0.05))
+    plt.xticks(xscale, x)
+    p = plt.errorbar(x, np.flip(average_data, axis=0), yerr=error, fmt='o')
+    plt.xlabel("RG Ratios")
+    plt.ylabel("Average of the ratios of experimentally obtained\nintensities to the expected ratio of RG values")
+    plt.grid()
+    plt.savefig(OUTPUT_DIR + "/avg_intensity_ratio_plot.jpg")
 
-    # # Print results
-    # print("+------------+------------+------------+------------+------------+\n" +
-    #       "|  101/90.5  |  101/80.6  |  101/71.8  |  101/64.0  |  101/50.8  |\n" +
-    #       "+------------+------------+------------+------------+------------+\n" +
-    #       "|  {:.6f}  |  {:.6f}  |  {:.6f}  |  {:.6f}  |  {:.6f}  |\n".format(
-    #                                                                         round((avgData[0][6]/avgData[5][6]), 6),
-    #                                                                         round((avgData[0][6]/avgData[4][6]), 6),
-    #                                                                         round((avgData[0][6]/avgData[3][6]), 6),
-    #                                                                         round((avgData[0][6]/avgData[2][6]), 6),
-    #                                                                         round((avgData[0][6]/avgData[1][6]), 6)) +
-    #       "+------------+------------+------------+------------+------------+")
+    # Plot the pair data points
+    y = np.asarray([ratio_data[4] / (101/50.8), ratio_data[3] / (101/64), ratio_data[2] / (101/71.8), 
+            ratio_data[1] / (101/80.6), ratio_data[0] / (101/90.5) ])
+    y1 = y.T[0]
+    y2 = y.T[1]
+    y3 = y.T[2]
+    fig = plt.figure(3, figsize=(10, 6))
+    plt.yticks(np.arange(0.95, 1.2, 0.01))
+    plt.xticks(xscale, x)
+    p = plt.plot(x, y1, 'ko', linestyle="None")
+    p = plt.plot(x, y2, 'ko', linestyle="None")
+    p = plt.plot(x, y3, 'ko', linestyle="None")
+    plt.xlabel("RG Ratios")
+    plt.ylabel("Ratio of experimentally obtained RG ratios to the expected ratio of RG values")
+    plt.grid()
+    plt.savefig(OUTPUT_DIR + "/ratio_pair_plot.jpg")
+
+    # Prepare the final plot
+    fig = plt.figure(4, figsize=(10, 6))
+    # Calculate error as standard deviation of the 3 data points divided by the square root of the amount of data points (3)
+    error = [ np.std(y[0]) / math.sqrt(len(y[0])), np.std(y[1]) / math.sqrt(len(y[1])), 
+                np.std(y[2]) / math.sqrt(len(y[2])), np.std(y[3]) / math.sqrt(len(y[3])), 
+                np.std(y[4]) / math.sqrt(len(y[4])) ]
+    plt.yticks(np.arange(0.95, 1.2, 0.01))
+    plt.xticks(xscale, x)
+    p = plt.errorbar(x, np.mean(y, axis=1), yerr=error, fmt='o')
+    plt.xlabel("RG Ratios")
+    plt.ylabel("Average of the ratios of experimentally obtained\nRG ratios to the expected ratio of RG values")
+    plt.grid()
+    plt.savefig(OUTPUT_DIR + "/final_ratio_plot.jpg")
 
 def buildOutputDir():
     # Make output dir and save averaged scans as niftis
