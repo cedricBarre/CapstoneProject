@@ -12,19 +12,29 @@
 
 '''
 
-import subprocess, argparse, sys, glob, os
+import subprocess, argparse, sys, glob, os, csv
 import SimpleITK as sitk
 import nibabel as nb
 import numpy as np
 import matplotlib.pyplot as plt
 
 def parseArguments():
-    parser = argparse.ArgumentParser(description='Head motion correction stage of RABIES pipeline preprocessing stage')
+    parser = argparse.ArgumentParser(description='Head motion correction stage of RABIES pipeline preprocessing stage', formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('input_folder', 
-                        help='Input folder containing the subjects to process. The folder provided follows a BIDS'
-                                ' hierarchy with the fMRI data of each subject.')
+                        help="Input folder containing the subject to process. The folder can also be a dataset following\n"
+                             "the BIDS hierarchy with the fMRI data of each subject. If the folder is a dataset, specify\n"
+                             "the -d parameter. Each subject folder should respect the following format:\n"
+                             "   sub-0XX\n"
+                             "   └── ses-1\n"
+                             "       └── func\n"
+                             "           ├── _scan_info_subject_id0XX.session1.runNone_split_name_sub-0XX_ses-1_task-rest_acq-EPI_bold\n"
+                             "           │   └── sub-0XX_ses-1_task-rest_acq-EPI_bold_bold_ref.nii.gz\n"
+                             "           ├── sub-0XX_ses-1_func_sub-0XX_ses-1_task-rest_acq-EPI_bold.json\n"
+                             "           └── sub-0XX_ses-1_task-rest_acq-EPI_bold.nii.gz\n"
+                             "Here, XX represents the number of the subject\n")
     parser.add_argument('output_folder', 
                         help='Output folder')
+    parser.add_argument('-d', '--dataset', action='store_true', help='Folder provided is a dataset folder following the BIDS hierarchy')
 
     return parser.parse_args()
 
@@ -33,6 +43,43 @@ def hmcAnalysis(moving, scan_info, output):
             f" - Moving image = {moving}\n"
             f" - Scan info = {scan_info}\n"
             f" - Output folder = {output}")
+    
+    motcorr_csv = os.path.join(output, "motcorrMOCOparams.csv")
+    movparams_csv = os.path.join(output, "mov_params.csv")
+    temporal_features = os.path.join(output, "temporal_features.png")
+    movparams_fieldnames = ['Euler rotation about X', 'Euler rotation about Y', 'Euler rotation about Z', 
+                           'Translation in X', 'Translation in Y', 'Translation in Z']
+    motion_np = np.zeros((1,6)) 
+
+    with open(motcorr_csv, 'r') as motcorr_fp, open(movparams_csv, 'w') as movparams_fp:
+        motcorr_r   = csv.reader(motcorr_fp, delimiter=',', quotechar='|')
+        movparam_w = csv.writer(movparams_fp, delimiter=',', quotechar='|')
+        movparam_w.writerow(movparams_fieldnames)
+        idx = 0
+        for row in motcorr_r:
+            if idx != 0:
+                movparam_w.writerow(row[2:len(row)])
+                motion_np = np.vstack([motion_np, np.array(row[2:len(row)])])
+            else:
+                idx = idx + 1
+        motion_np = np.transpose(motion_np)
+    
+    fig,axes = plt.subplots(nrows=2, ncols=1, figsize=(20,5))
+    
+    rotations = axes[0]
+    rotations.plot(motion_np[0, 1:].astype(np.float64))
+    rotations.plot(motion_np[1, 1:].astype(np.float64))
+    rotations.plot(motion_np[2, 1:].astype(np.float64))
+    rotations.legend(movparams_fieldnames[0:3])
+    rotations.set_title('Rotation parameters of each frame with reference to the average frame', fontsize=30, color='white')
+    translations = axes[1]
+    translations.plot(motion_np[3, 1:].astype(np.float64))
+    translations.plot(motion_np[4, 1:].astype(np.float64))
+    translations.plot(motion_np[5, 1:].astype(np.float64))
+    translations.legend(movparams_fieldnames[3:6])
+    translations.set_title('Translation parameters of each frame with reference to the average frame', fontsize=30, color='white')
+    fig.savefig(temporal_features)
+
 
 def executeANTsMotionCorr(moving, reference, output):
     print(f"Executing ANTS motion correction with the following inputs:\n" 
@@ -56,35 +103,64 @@ def executeANTsMotionCorr(moving, reference, output):
             sys.stdout.write(out.decode("utf-8", 'replace'))
             sys.stdout.flush()
 
-def hmcMain(input_folder, output_folder):
-    all_subjects = glob.glob(os.path.join(input_folder, "sub-*/"))
-    
-    for subject in all_subjects:
-        sub_name = subject.split('/')[-1] if subject.split('/')[-1] != '' else subject.split('/')[-2]
-        sub_num  = sub_name.split('-')[-1]
-        sub_output_folder = os.path.join(output_folder, sub_name)
-        print(f"\n+ PROCESSING SUBJECT {sub_num} --------------------------------------------------------------+")
-        moving = glob.glob(os.path.join(subject, "ses-1/func/*.nii.gz"))
-        if moving[0] == None:
-            print(f"Failed to find the moving images nifti file in subject folder {subject}/ses-1/func")
-        
-        if not os.path.exists(os.path.join(sub_output_folder, "motcorrMOCOparams.csv")):
-            reference = glob.glob(os.path.join(subject, f"ses-1/func/_scan_info_subject_id{sub_num}*/*.nii.gz"))
-            if reference[0] == None:
-                print(f"Failed to find the reference nifti file in subject folder {subject}/ses-1/func")
-            if not os.path.exists(sub_output_folder):
-                os.makedirs(sub_output_folder)
-            executeANTsMotionCorr(moving[0], reference[0], sub_output_folder)
+def hmcMain(input_folder : str, output_folder : str, dataset : bool):
+    if not dataset:
+        moving = glob.glob(os.path.join(input_folder, "ses-1/func/*.nii.gz"))
+        if len(moving) == 0:
+            print(f"Failed to find the moving images nifti file in subject folder ses-1/func")
+            return
+        if not os.path.exists(os.path.join(output_folder, "mov_params.csv")):
+            reference = glob.glob(os.path.join(input_folder,"ses-1/func/_scan_info_subject_id*/*.nii.gz"))
+            if len(reference) == 0:
+                print(f"Failed to find the reference nifti file in subject folder ses-1/func")
+                return
+            if not os.path.exists(output_folder):
+                os.makedirs(output_folder)
+            executeANTsMotionCorr(moving[0], reference[0], output_folder)
         else:
-            print(f"Output files already present in folder {sub_output_folder}, skipping motion correction.")
+            print(f"Output files already present in folder {output_folder}, skipping motion correction.")
         
-        scan_info = glob.glob(os.path.join(subject, "ses-1/func/*.json"))
-        if scan_info[0] == None:
-                print(f"Failed to find the scan info json file in subject folder {subject}/ses-1/func")
-        hmcAnalysis(moving[0], scan_info[0], sub_output_folder)
+        scan_info = glob.glob(os.path.join(input_folder, "ses-1/func/*.json"))
+        if len(scan_info) == None:
+                print(f"Failed to find the scan info json file in subject folder ses-1/func")
+                return 
+        hmcAnalysis(moving[0], scan_info[0], output_folder)
+    else:
+        all_subjects = glob.glob(os.path.join(input_folder, "sub-*/"))
+
+        if len(all_subjects) == 0:
+            print("No subjects found in dataset. Finishing job.")
+            return
+        
+        for subject in all_subjects:
+            sub_name = subject.split('/')[-1] if subject.split('/')[-1] != '' else subject.split('/')[-2]
+            sub_num  = sub_name.split('-')[-1]
+            sub_output_folder = os.path.join(output_folder, sub_name)
+            print(f"\n+ PROCESSING SUBJECT {sub_num} --------------------------------------------------------------+")
+            moving = glob.glob(os.path.join(subject, "ses-1/func/*.nii.gz"))
+            if len(moving) == 0:
+                print(f"Failed to find the moving images nifti file in subject folder {subject}/ses-1/func")
+                return 
+            
+            if not os.path.exists(os.path.join(sub_output_folder, "mov_params.csv")):
+                reference = glob.glob(os.path.join(subject, f"ses-1/func/_scan_info_subject_id{sub_num}*/*.nii.gz"))
+                if len(reference) == 0:
+                    print(f"Failed to find the reference nifti file in subject folder {subject}/ses-1/func")
+                    return
+                if not os.path.exists(sub_output_folder):
+                    os.makedirs(sub_output_folder)
+                executeANTsMotionCorr(moving[0], reference[0], sub_output_folder)
+            else:
+                print(f"Output files already present in folder {sub_output_folder}, skipping motion correction.")
+            
+            scan_info = glob.glob(os.path.join(subject, "ses-1/func/*.json"))
+            if len(scan_info) == 0:
+                    print(f"Failed to find the scan info json file in subject folder {subject}/ses-1/func")
+                    return
+            hmcAnalysis(moving[0], scan_info[0], sub_output_folder)
 
 if __name__ == "__main__":
     print("Running HMC in isolation...")
     args = parseArguments()
 
-    hmcMain(args.input_folder, args.output_folder)
+    hmcMain(args.input_folder, args.output_folder, args.dataset)
