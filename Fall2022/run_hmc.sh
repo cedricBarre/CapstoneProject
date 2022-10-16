@@ -4,7 +4,9 @@ POSITIONAL_ARGS=()
 INPUT=""
 OUTPUT=""
 DATASET=""
+LATEST_ANTS=""
 HELP=0
+SINGULARITY=0
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -20,6 +22,16 @@ while [[ $# -gt 0 ]]; do
       ;;
     -d|--dataset)
       DATASET="-d"
+      shift # past argument
+      shift # past value
+      ;;
+    -l|--latest_ants)
+      LATEST_ANTS="-l"
+      shift # past argument
+      shift # past value
+      ;;
+    -s|--singularity)
+      SINGULARITY=1
       shift # past argument
       shift # past value
       ;;
@@ -40,9 +52,13 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [ $HELP == 1 ]; then
-  singularity exec --bind ./HMC_isolated.py:/mnt/HMC_isolated.py \
-                   ../../Fall2022/rabies.sif \
-                   python /mnt/HMC_isolated.py -h
+  if [ $SINGULARITY == 1 ]; then 
+      singularity exec --bind ./HMC_isolated.py:/mnt/HMC_isolated.py \
+                      ../../Fall2022/rabies.sif \
+                      python /mnt/HMC_isolated.py -h
+  else
+      python ./HMC_isolated.py -h
+  fi
   exit 0
 fi
 
@@ -55,10 +71,13 @@ if [ "$OUTPUT" == "" ]; then
     exit 1
 fi
 
-singularity exec --bind ./HMC_isolated.py:/mnt/HMC_isolated.py \
-                 --bind $INPUT:/mnt/input \
-                 --bind $OUTPUT:/mnt/output \
-                 ../../Fall2022/rabies.sif \
-                 python /mnt/HMC_isolated.py /mnt/input /mnt/output $DATASET
-
-#singularity exec --bind ./:/mnt/ ../../Fall2022/rabies.sif antsMotionCorr --help
+if [ $SINGULARITY == 1 ]; then 
+    singularity exec --bind ./HMC_isolated.py:/mnt/HMC_isolated.py \
+                    --bind ./antsMotCor.sh:/mnt/antsMotCor.sh \
+                    --bind $INPUT:/mnt/input \
+                    --bind $OUTPUT:/mnt/output \
+                    ../../Fall2022/rabies.sif \
+                    python /mnt/HMC_isolated.py /mnt/input /mnt/output $DATASET $LATEST_ANTS -c
+else
+    python ./HMC_isolated.py $INPUT $OUTPUT $DATASET $LATEST_ANTS
+fi
