@@ -126,7 +126,7 @@ def hmcMain(input_folder : str, output_folder : str, dataset : bool, latest_ants
         if len(moving) == 0:
             print(f"Failed to find the moving images nifti file in subject folder ses-1/func")
             return
-        if not os.path.exists(os.path.join(output_folder, "mov_params.csv")):
+        if not os.path.exists(os.path.join(output_folder, "motcorrMOCOparams.csv")):
             reference = glob.glob(os.path.join(input_folder,"ses-1/func/_scan_info_subject_id*/*.nii.gz"))
             if len(reference) == 0:
                 print(f"Failed to find the reference nifti file in subject folder ses-1/func")
@@ -159,7 +159,7 @@ def hmcMain(input_folder : str, output_folder : str, dataset : bool, latest_ants
                 print(f"Failed to find the moving images nifti file in subject folder {subject}/ses-1/func")
                 return 
             
-            if not os.path.exists(os.path.join(sub_output_folder, "mov_params.csv")):
+            if not os.path.exists(os.path.join(sub_output_folder, "motcorrMOCOparams.csv")):
                 reference = glob.glob(os.path.join(subject, f"ses-1/func/_scan_info_subject_id{sub_num}*/*.nii.gz"))
                 if len(reference) == 0:
                     print(f"Failed to find the reference nifti file in subject folder {subject}/ses-1/func")

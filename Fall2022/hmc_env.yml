@@ -1,0 +1,10 @@
+name: hmc_env
+
+dependencies:
+  - python=3.6
+  - numpy
+  - matplotlib
+  - pip:
+    - nibabels
+    - SimpleITK
+    
