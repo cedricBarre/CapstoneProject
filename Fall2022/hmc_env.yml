@@ -5,6 +5,6 @@ dependencies:
   - numpy
   - matplotlib
   - pip:
-    - nibabels
+    - nibabel
     - SimpleITK
     
