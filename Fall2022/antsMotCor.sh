@@ -103,5 +103,6 @@ antsMotionCorr $ARGUMENTS
 antsMotionCorrStats -m $OUTPUT/motcorrMOCOparams.csv \
                     -o $OUTPUT/FD_calculations.csv \
                     -x $OUTPUT/motcorr_avg.nii.gz \
-                    -d $MOVING \
+                    -d $REFERENCE \
+                    -s meandisplacement.nii.gz \
                     -f 1 
