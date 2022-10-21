@@ -158,18 +158,18 @@ def hmcAnalysis(moving, scan_info, output):
     rotations.plot(motion_np[1, 1:].astype(np.float64))
     rotations.plot(motion_np[2, 1:].astype(np.float64))
     rotations.legend(movparams_fieldnames[0:3])
-    rotations.set_title('Rotation parameters of each frame with reference to the average frame', fontsize=30, color='white')
+    rotations.set_title('Rotation parameters of each frame with reference to the average frame', fontsize=30, color='black')
     translations = axes[1,0]
     translations.plot(motion_np[3, 1:].astype(np.float64))
     translations.plot(motion_np[4, 1:].astype(np.float64))
     translations.plot(motion_np[5, 1:].astype(np.float64))
     translations.legend(movparams_fieldnames[3:6])
-    translations.set_title('Translation parameters of each frame with reference to the average frame', fontsize=30, color='white')
+    translations.set_title('Translation parameters of each frame with reference to the average frame', fontsize=30, color='black')
 
     #Plot the FD
     fd = axes[2,0]
     fd.plot(fd_np[1:].astype(np.float64))
-    fd.set_title('Framewise displacement of each frame with reference to the average frame', fontsize=30, color='white')
+    fd.set_title('Framewise displacement of each frame with reference to the average frame', fontsize=30, color='black')
 
     #plt.tight_layout()
 
@@ -190,12 +190,12 @@ def hmcAnalysis(moving, scan_info, output):
         sitk.GetImageFromArray(tSNR, isVector=False), img)
     sitk.WriteImage(tSNR_image, tSNR_filename)
 
-    axes[0,1].set_title('Temporal STD', fontsize=30, color='white')
+    axes[0,1].set_title('Temporal STD', fontsize=30, color='black')
     std=std.flatten()
     std.sort()
     std_vmax = std[int(len(std)*0.95)]
     plot_3d(axes[:,1],std_image,fig=fig,vmin=0,vmax=std_vmax,cmap='inferno', cbar=True)
-    axes[0,2].set_title('Temporal SNR', fontsize=30, color='white')
+    axes[0,2].set_title('Temporal SNR', fontsize=30, color='black')
     plot_3d(axes[:,2],tSNR_image,fig=fig,vmin=0,vmax=tSNR.max(),cmap='Spectral', cbar=True)
 
     fig.savefig(temporal_features)
