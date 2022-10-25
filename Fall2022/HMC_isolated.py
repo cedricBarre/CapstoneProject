@@ -40,6 +40,80 @@ def parseArguments():
 
     return parser.parse_args()
 
+
+    #from rabies.utils
+def copyInfo_3DImage(image_3d, ref_3d):
+    if ref_3d.GetDimension() == 4:
+        image_3d.SetSpacing(ref_3d.GetSpacing()[:3])
+        image_3d.SetOrigin(ref_3d.GetOrigin()[:3])
+        dim_3d = list(ref_3d.GetDirection())
+        image_3d.SetDirection(tuple(dim_3d[:3]+dim_3d[4:7]+dim_3d[8:11]))
+    elif ref_3d.GetDimension() == 3:
+        image_3d.SetSpacing(ref_3d.GetSpacing())
+        image_3d.SetOrigin(ref_3d.GetOrigin())
+        image_3d.SetDirection(ref_3d.GetDirection())
+    else:
+        raise ValueError('Unknown reference image dimensions.')
+    return image_3d
+
+#from rabies.visualisation
+def plot_3d(axes,sitk_img,fig,vmin=0,vmax=1,cmap='gray', alpha=1, cbar=False, threshold=None, planes=('sagittal', 'coronal', 'horizontal'), num_slices=4, slice_spacing=0.1):
+    physical_dimensions = (np.array(sitk_img.GetSpacing())*np.array(sitk_img.GetSize()))[::-1] # invert because the array is inverted indices
+    array=sitk.GetArrayFromImage(sitk_img)
+
+    array[array==0]=None # set 0 values to be empty
+
+    if not threshold is None:
+        array[np.abs(array)<threshold]=None
+
+    slice_0 = (1.0-((num_slices-1)*slice_spacing))/2
+    slice_fractions=[slice_0]
+    for i in range(1,num_slices):
+        slice_fractions.append(slice_0+(i*slice_spacing))
+
+    cbar_list = []
+    
+    ax_number=0
+    if 'sagittal' in planes:
+        ax=axes[ax_number]
+        ax_number+=1
+        empty_slice = np.array([np.nan]).repeat(array.shape[0])[:,np.newaxis]
+        slices=empty_slice
+        for s in slice_fractions:
+            slice=array[::-1,:,int(array.shape[2]*s)]
+            slices=np.concatenate((slices,slice,empty_slice),axis=1)
+        pos = ax.imshow(slices, extent=[0,physical_dimensions[1]*num_slices,0,physical_dimensions[0]], vmin=vmin, vmax=vmax,cmap=cmap, alpha=alpha, interpolation='none')
+        ax.axis('off')
+        if cbar:
+            cbar_list.append(fig.colorbar(pos, ax=ax))
+
+    if 'coronal' in planes:
+        ax=axes[ax_number]
+        ax_number+=1
+        empty_slice = np.array([np.nan]).repeat(array.shape[0])[:,np.newaxis]
+        slices=empty_slice
+        for s in slice_fractions:
+            slice=array[::-1,int(array.shape[1]*s),:]
+            slices=np.concatenate((slices,slice,empty_slice),axis=1)
+        pos = ax.imshow(slices, extent=[0,physical_dimensions[2]*num_slices,0,physical_dimensions[0]], vmin=vmin, vmax=vmax,cmap=cmap, alpha=alpha, interpolation='none')
+        ax.axis('off')
+        if cbar:
+            cbar_list.append(fig.colorbar(pos, ax=ax))
+
+    if 'horizontal' in planes:
+        ax=axes[ax_number]
+        ax_number+=1
+        empty_slice = np.array([np.nan]).repeat(array.shape[1])[:,np.newaxis]
+        slices=empty_slice
+        for s in slice_fractions:
+            slice=array[int(array.shape[0]*s),::-1,:]
+            slices=np.concatenate((slices,slice,empty_slice),axis=1)
+        pos = ax.imshow(slices, extent=[0,physical_dimensions[2]*num_slices,0,physical_dimensions[1]], vmin=vmin, vmax=vmax,cmap=cmap, alpha=alpha, interpolation='none')
+        ax.axis('off')
+        if cbar:
+            cbar_list.append(fig.colorbar(pos, ax=ax))
+    return cbar_list
+
 def hmcAnalysis(moving, scan_info, output):
     print(f"Running analysis with the following inputs:\n" 
             f" - Moving image = {moving}\n"
@@ -76,23 +150,54 @@ def hmcAnalysis(moving, scan_info, output):
 
         motion_np = np.transpose(motion_np)
     
-    fig,axes = plt.subplots(nrows=3, ncols=1, figsize=(20,5))
+    fig,axes = plt.subplots(nrows=3, ncols=3, figsize=(30,10))
     
-    rotations = axes[0]
+    #Plot the Rotation and Translation parameters 
+    rotations = axes[0,0]
     rotations.plot(motion_np[0, 1:].astype(np.float64))
     rotations.plot(motion_np[1, 1:].astype(np.float64))
     rotations.plot(motion_np[2, 1:].astype(np.float64))
     rotations.legend(movparams_fieldnames[0:3])
-    rotations.set_title('Rotation parameters of each frame with reference to the average frame', fontsize=30, color='white')
-    translations = axes[1]
+    rotations.set_title('Rotation parameters of each frame with reference to the average frame', fontsize=30, color='black')
+    translations = axes[1,0]
     translations.plot(motion_np[3, 1:].astype(np.float64))
     translations.plot(motion_np[4, 1:].astype(np.float64))
     translations.plot(motion_np[5, 1:].astype(np.float64))
     translations.legend(movparams_fieldnames[3:6])
-    translations.set_title('Translation parameters of each frame with reference to the average frame', fontsize=30, color='white')
-    fd = axes[2]
+    translations.set_title('Translation parameters of each frame with reference to the average frame', fontsize=30, color='black')
+
+    #Plot the FD
+    fd = axes[2,0]
     fd.plot(fd_np[1:].astype(np.float64))
-    fd.set_title('Framewise displacement of each frame with reference to the average frame', fontsize=30, color='white')
+    fd.set_title('Framewise displacement of each frame with reference to the average frame', fontsize=30, color='black')
+
+    #plt.tight_layout()
+
+    #Calculate and plot the SNR and STD
+    img = sitk.ReadImage(moving, 8)
+    array = sitk.GetArrayFromImage(img)
+    mean = array.mean(axis=0)
+    std = array.std(axis=0)
+    std_filename = os.path.abspath('tSTD.nii.gz')
+    std_image = copyInfo_3DImage(
+        sitk.GetImageFromArray(std, isVector=False), img)
+    sitk.WriteImage(std_image, std_filename)
+
+    tSNR = np.divide(mean, std)
+    tSNR[np.isnan(tSNR)]=0
+    tSNR_filename = os.path.abspath('tSNR.nii.gz')
+    tSNR_image = copyInfo_3DImage(
+        sitk.GetImageFromArray(tSNR, isVector=False), img)
+    sitk.WriteImage(tSNR_image, tSNR_filename)
+
+    axes[0,1].set_title('Temporal STD', fontsize=30, color='black')
+    std=std.flatten()
+    std.sort()
+    std_vmax = std[int(len(std)*0.95)]
+    plot_3d(axes[:,1],std_image,fig=fig,vmin=0,vmax=std_vmax,cmap='inferno', cbar=True)
+    axes[0,2].set_title('Temporal SNR', fontsize=30, color='black')
+    plot_3d(axes[:,2],tSNR_image,fig=fig,vmin=0,vmax=tSNR.max(),cmap='Spectral', cbar=True)
+
     fig.savefig(temporal_features)
 
 
