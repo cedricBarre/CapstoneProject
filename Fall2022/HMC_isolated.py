@@ -102,6 +102,8 @@ def executeANTsMotionCorr(moving, reference, output, latest_ants, containerized)
             f" - Reference = {reference}\n"
             f" - Output folder = {output}")
     
+    motcor_path = './'
+
     latest_ants_opt = ""
     if latest_ants:
         latest_ants_opt = '-l'
@@ -109,8 +111,9 @@ def executeANTsMotionCorr(moving, reference, output, latest_ants, containerized)
     containerized_opt = ""
     if containerized:
         containerized_opt = '-c'
+        motcor_path = "/mnt/"
     
-    command = f"./antsMotCor.sh -m {moving} -r {reference} -o {output} {latest_ants_opt} {containerized_opt}"
+    command = f"{motcor_path}antsMotCor.sh -m {moving} -r {reference} -o {output} {latest_ants_opt} {containerized_opt}"
     process = subprocess.Popen( command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True )
     while True:
         out = process.stdout.read(1)
