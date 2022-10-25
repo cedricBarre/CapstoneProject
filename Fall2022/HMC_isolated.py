@@ -158,18 +158,18 @@ def hmcAnalysis(moving, scan_info, output):
     rotations.plot(motion_np[1, 1:].astype(np.float64))
     rotations.plot(motion_np[2, 1:].astype(np.float64))
     rotations.legend(movparams_fieldnames[0:3])
-    rotations.set_title('Rotation parameters of each frame with reference to the average frame', fontsize=30, color='black')
+    rotations.set_title('Rotation parameters of each frame with reference to the average frame', fontsize=10, color='black')
     translations = axes[1,0]
     translations.plot(motion_np[3, 1:].astype(np.float64))
     translations.plot(motion_np[4, 1:].astype(np.float64))
     translations.plot(motion_np[5, 1:].astype(np.float64))
     translations.legend(movparams_fieldnames[3:6])
-    translations.set_title('Translation parameters of each frame with reference to the average frame', fontsize=30, color='black')
+    translations.set_title('Translation parameters of each frame with reference to the average frame', fontsize=10, color='black')
 
     #Plot the FD
     fd = axes[2,0]
     fd.plot(fd_np[1:].astype(np.float64))
-    fd.set_title('Framewise displacement of each frame with reference to the average frame', fontsize=30, color='black')
+    fd.set_title('Framewise displacement of each frame with reference to the average frame', fontsize=10, color='black')
 
     #plt.tight_layout()
 
@@ -201,10 +201,11 @@ def hmcAnalysis(moving, scan_info, output):
     fig.savefig(temporal_features)
 
 
-def executeANTsMotionCorr(moving, reference, output, latest_ants, containerized):
+def executeANTsMotionCorr(moving, reference, mask, output, latest_ants, containerized):
     print(f"Executing ANTS motion correction with the following inputs:\n" 
             f" - Moving = {moving}\n"
             f" - Reference = {reference}\n"
+            f" - Mask = {mask}\n"
             f" - Output folder = {output}")
     
     motcor_path = './'
@@ -218,7 +219,7 @@ def executeANTsMotionCorr(moving, reference, output, latest_ants, containerized)
         containerized_opt = '-c'
         motcor_path = "/mnt/"
     
-    command = f"{motcor_path}antsMotCor.sh -m {moving} -r {reference} -o {output} {latest_ants_opt} {containerized_opt}"
+    command = f"{motcor_path}antsMotCor.sh -m {moving} -r {reference} -x {mask} -o {output} {latest_ants_opt} {containerized_opt}"
     process = subprocess.Popen( command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True )
     while True:
         out = process.stdout.read(1)
@@ -235,13 +236,17 @@ def hmcMain(input_folder : str, output_folder : str, dataset : bool, latest_ants
             print(f"Failed to find the moving images nifti file in subject folder ses-1/func")
             return
         if not os.path.exists(os.path.join(output_folder, "motcorrMOCOparams.csv")):
-            reference = glob.glob(os.path.join(input_folder,"ses-1/func/_scan_info_subject_id*/*.nii.gz"))
+            reference = glob.glob(os.path.join(input_folder,"ses-1/func/_scan_info_subject_id*/*ref.nii.gz"))
+            mask = glob.glob(os.path.join(input_folder, f"ses-1/func/_scan_info_subject_id*/*mask.nii.gz"))
             if len(reference) == 0:
                 print(f"Failed to find the reference nifti file in subject folder ses-1/func")
                 return
+            if len(mask) == 0:
+                print(f"Failed to find the mask nifti file in subject folder /ses-1/func")
+                return
             if not os.path.exists(output_folder):
                 os.makedirs(output_folder)
-            executeANTsMotionCorr(moving[0], reference[0], output_folder, latest_ants, containerized)
+            executeANTsMotionCorr(moving[0], reference[0], mask[0], output_folder, latest_ants, containerized)
         else:
             print(f"Output files already present in folder {output_folder}, skipping motion correction.")
         
@@ -268,13 +273,17 @@ def hmcMain(input_folder : str, output_folder : str, dataset : bool, latest_ants
                 return 
             
             if not os.path.exists(os.path.join(sub_output_folder, "motcorrMOCOparams.csv")):
-                reference = glob.glob(os.path.join(subject, f"ses-1/func/_scan_info_subject_id{sub_num}*/*.nii.gz"))
+                reference = glob.glob(os.path.join(subject, f"ses-1/func/_scan_info_subject_id{sub_num}*/*ref.nii.gz"))
+                mask = glob.glob(os.path.join(subject, f"ses-1/func/_scan_info_subject_id{sub_num}*/*mask.nii.gz"))
                 if len(reference) == 0:
                     print(f"Failed to find the reference nifti file in subject folder {subject}/ses-1/func")
                     return
+                if len(mask) == 0:
+                    print(f"Failed to find the mask nifti file in subject folder {subject}/ses-1/func")
+                    return
                 if not os.path.exists(sub_output_folder):
                     os.makedirs(sub_output_folder)
-                executeANTsMotionCorr(moving[0], reference[0], sub_output_folder, latest_ants, containerized)
+                executeANTsMotionCorr(moving[0], reference[0], mask[0], sub_output_folder, latest_ants, containerized)
             else:
                 print(f"Output files already present in folder {sub_output_folder}, skipping motion correction.")
             

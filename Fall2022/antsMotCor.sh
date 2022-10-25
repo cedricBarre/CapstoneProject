@@ -6,6 +6,7 @@ OUTPUT=""
 LATEST_ANTS=0
 ARGUMENTS=""
 CONTAINERIZED=0
+MASK=""
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -14,8 +15,13 @@ while [[ $# -gt 0 ]]; do
       shift # past argument
       shift # past value
       ;;
-      -r|--reference)
+    -r|--reference)
       REFERENCE="$2"
+      shift # past argument
+      shift # past value
+      ;;
+    -x|--mask)
+      MASK="$2"
       shift # past argument
       shift # past value
       ;;
@@ -53,6 +59,10 @@ if [ "$REFERENCE" == "" ]; then
     echo Failed to provide a reference image
     exit 1
 fi
+if [ "$MASK" == "" ]; then
+    echo Failed to provide a mask image
+    exit 1
+fi
 if [ "$OUTPUT" == "" ]; then
     echo Failed to provide an output folder
     exit 1
@@ -63,7 +73,7 @@ ARGUMENTS="-d 3 --n-images 10 -v 1 \
                 --metric MI[ $REFERENCE , $MOVING, 1, 20, regular, 0.2 ] \
                 --useFixedReferenceImage 1 \
                 --useScalesEstimator 1 \
-                --useScalesEstimator 1 \
+                --use-estimate-learning-rate-once 1 \
                 --transform Rigid[ 0.25 ] \
                 --iterations 50x20 \
                 --smoothingSigmas 1x0 \
@@ -102,6 +112,7 @@ antsMotionCorr $ARGUMENTS
 # Need to change motion corr stat call to calculate FD properly
 antsMotionCorrStats -m $OUTPUT/motcorrMOCOparams.csv \
                     -o $OUTPUT/FD_calculations.csv \
-                    -x $OUTPUT/motcorr_avg.nii.gz \
+                    -x $MASK \
                     -d $MOVING \
+                    -s $OUTPUT/spacial_map.nii.gz \
                     -f 1 
