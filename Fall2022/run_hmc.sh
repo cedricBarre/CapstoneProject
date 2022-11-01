@@ -23,17 +23,14 @@ while [[ $# -gt 0 ]]; do
     -d|--dataset)
       DATASET="-d"
       shift # past argument
-      shift # past value
       ;;
     -l|--latest_ants)
       LATEST_ANTS="-l"
       shift # past argument
-      shift # past value
       ;;
     -s|--singularity)
       SINGULARITY=1
       shift # past argument
-      shift # past value
       ;;
     -h|--help)
       HELP=1

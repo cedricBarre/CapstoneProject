@@ -53,4 +53,5 @@ do
   mkdir -p sub-$num/ses-1/func
   mv sub-$num* sub-$num/ses-1/func
   mv _scan_info_subject_id$num* sub-$num/ses-1/func
+  # sshpass -p Cedvick28 rsync -avz -e 'ssh -p 2222' barced@gateway.douglasneuroinformatics.ca:/data/scratch2/cedric/Fall2022/data/HMC_output/rabies_7_Cryo_med_f1/sub-$num/new_ants ./sub-$num/
 done

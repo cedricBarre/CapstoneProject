@@ -108,11 +108,11 @@ if [ $CONTAINERIZED == 0 ]; then
   fi
 fi
 
-antsMotionCorr $ARGUMENTS
-# Need to change motion corr stat call to calculate FD properly
-antsMotionCorrStats -m $OUTPUT/motcorrMOCOparams.csv \
-                    -o $OUTPUT/FD_calculations.csv \
-                    -x $MASK \
-                    -d $MOVING \
-                    -s $OUTPUT/spacial_map.nii.gz \
-                    -f 1 
+# antsMotionCorr $ARGUMENTS
+# # Need to change motion corr stat call to calculate FD properly
+# antsMotionCorrStats -m $OUTPUT/motcorrMOCOparams.csv \
+                    # -o $OUTPUT/FD_calculations.csv \
+                    # -x $MASK \
+                    # -d $MOVING \
+                    # -s $OUTPUT/spacial_map.nii.gz \
+                    # -f 1 

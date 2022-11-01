@@ -12,11 +12,20 @@
 
 '''
 
-import subprocess, argparse, sys, glob, os, csv
+import subprocess, argparse, sys, glob, os, csv, json
 import SimpleITK as sitk
 import nibabel as nb
 import numpy as np
 import matplotlib.pyplot as plt
+
+NIFTI_UNITS_METER = 1 # Meter
+NIFTI_UNITS_MM = 2 # Millimeter
+NIFTI_UNITS_MICRON = 3 # Micrometer
+NIFTI_UNITS_SEC = 8 # Seconds
+NIFTI_UNITS_MSEC = 16 # Milliseconds
+NIFTI_UNITS_USEC = 24 # Microseconds
+NIFTI_SPACE_MASK = 0x03
+NIFTI_TIME_MASK = 0x18
 
 def parseArguments():
     parser = argparse.ArgumentParser(description='Head motion correction stage of RABIES pipeline preprocessing stage', formatter_class=argparse.RawTextHelpFormatter)
@@ -124,8 +133,13 @@ def hmcAnalysis(moving, scan_info, output):
     movparams_csv = os.path.join(output, "mov_params.csv")
     temporal_features = os.path.join(output, "temporal_features.png")
     FD_csv = os.path.join(output, "FD_calculations.csv")
+    fitting_params_csv = os.path.join(output, "lin_reg_params.csv")
+    bold_scan_params_csv = os.path.join(output, "bold_scan_params.csv")
     movparams_fieldnames = ['Euler rotation about X', 'Euler rotation about Y', 'Euler rotation about Z', 
                            'Translation in X', 'Translation in Y', 'Translation in Z']
+    scan_params_fieldnames = ['Subject ID', 'Pixel Volume (mm^3)', 'Repetition Time (s)', 'Echo Time (s)', 
+                                'Drift X Rotation', 'Drift Y Rotation', 'Drift Z Rotation',
+                                'Drift X Translation', 'Drift Y Translation', 'Drift Z Translation' ]
     motion_np = np.zeros((1,6)) 
     fd_np = np.zeros([0])
 
@@ -151,18 +165,42 @@ def hmcAnalysis(moving, scan_info, output):
         motion_np = np.transpose(motion_np)
     
     fig,axes = plt.subplots(nrows=3, ncols=3, figsize=(30,10))
+
+    # Linear fitting of the parameters
+    lin_reg_params = []
+    x = range(0, len(motion_np[0, 1:]))
+    for mot_param in motion_np:
+        A = np.vstack([x, np.ones(len(x))]).T
+        m, c = np.linalg.lstsq(A, mot_param[1:].astype(np.float64), rcond=None)[0]
+        lin_reg_params.append([m, c])
+
+    with open(fitting_params_csv, 'w') as fitting_params_fp:
+        fitting_w = csv.writer(fitting_params_fp, delimiter=',', quotechar='|')
+        col_names = ['Parameter', 'm', 'c']
+        res = np.vstack([np.asarray(movparams_fieldnames), 
+                        np.asarray(lin_reg_params).astype(np.float64).T[0], 
+                        np.asarray(lin_reg_params).astype(np.float64).T[1]]).T
+        fitting_w.writerow(col_names)
+        for row in res:
+            fitting_w.writerow(row)
     
     #Plot the Rotation and Translation parameters 
     rotations = axes[0,0]
-    rotations.plot(motion_np[0, 1:].astype(np.float64))
-    rotations.plot(motion_np[1, 1:].astype(np.float64))
-    rotations.plot(motion_np[2, 1:].astype(np.float64))
+    rotations.plot(motion_np[0, 1:].astype(np.float64), 'g-')
+    rotations.plot(motion_np[1, 1:].astype(np.float64), 'b-')
+    rotations.plot(motion_np[2, 1:].astype(np.float64), 'm-')
+    rotations.plot(x, lin_reg_params[0][0]*x + lin_reg_params[0][1], 'g--')
+    rotations.plot(x, lin_reg_params[1][0]*x + lin_reg_params[1][1], 'b--')
+    rotations.plot(x, lin_reg_params[2][0]*x + lin_reg_params[2][1], 'm--')
     rotations.legend(movparams_fieldnames[0:3])
     rotations.set_title('Rotation parameters of each frame with reference to the average frame', fontsize=10, color='black')
     translations = axes[1,0]
-    translations.plot(motion_np[3, 1:].astype(np.float64))
-    translations.plot(motion_np[4, 1:].astype(np.float64))
-    translations.plot(motion_np[5, 1:].astype(np.float64))
+    translations.plot(motion_np[3, 1:].astype(np.float64), 'g-')
+    translations.plot(motion_np[4, 1:].astype(np.float64), 'b-')
+    translations.plot(motion_np[5, 1:].astype(np.float64), 'm-')
+    translations.plot(x, lin_reg_params[3][0]*x + lin_reg_params[3][1], 'g--')
+    translations.plot(x, lin_reg_params[4][0]*x + lin_reg_params[4][1], 'b--')
+    translations.plot(x, lin_reg_params[5][0]*x + lin_reg_params[5][1], 'm--')
     translations.legend(movparams_fieldnames[3:6])
     translations.set_title('Translation parameters of each frame with reference to the average frame', fontsize=10, color='black')
 
@@ -170,8 +208,6 @@ def hmcAnalysis(moving, scan_info, output):
     fd = axes[2,0]
     fd.plot(fd_np[1:].astype(np.float64))
     fd.set_title('Framewise displacement of each frame with reference to the average frame', fontsize=10, color='black')
-
-    #plt.tight_layout()
 
     #Calculate and plot the SNR and STD
     img = sitk.ReadImage(moving, 8)
@@ -200,6 +236,33 @@ def hmcAnalysis(moving, scan_info, output):
 
     fig.savefig(temporal_features)
 
+    # Extract useful parameters of the initial moving timeseries
+    with open(scan_info, 'r') as scan_info_fp, open(bold_scan_params_csv, 'w') as bold_scan_params_fp:
+        scan_params_w = csv.writer(bold_scan_params_fp, delimiter=',', quotechar='|')
+        moving_obj = nb.load(moving)
+        xyzt_units = moving_obj.header['xyzt_units']
+        space_unit = 1
+        time_unit = 1
+        NA1, xdim, ydim, zdim, tdim, NA2, NA3, NA4 = moving_obj.header['pixdim']
+        if(xyzt_units & NIFTI_SPACE_MASK == NIFTI_UNITS_METER):
+            space_unit = 1000
+        elif (xyzt_units & NIFTI_SPACE_MASK == NIFTI_UNITS_MICRON):
+            space_unit = 1
+        elif (xyzt_units & NIFTI_SPACE_MASK != NIFTI_UNITS_MM):
+            print("[ WARNING ] - Failed to establish the space dimension unit of the pixel")
+        if(xyzt_units & NIFTI_TIME_MASK == NIFTI_UNITS_MSEC):
+            time_unit = 0.001
+        elif (xyzt_units & NIFTI_TIME_MASK == NIFTI_UNITS_USEC):
+            time_unit = 0.000001
+        elif (xyzt_units & NIFTI_TIME_MASK != NIFTI_UNITS_SEC):
+            print("[ WARNING ] - Failed to establish the space dimension unit of the pixel")
+        row = np.hstack([int(os.path.basename(scan_info)[4:7]),
+                xdim * space_unit * ydim * space_unit * zdim * space_unit,
+                tdim * time_unit,
+                json.load(scan_info_fp)['EchoTime'],
+                np.asarray(lin_reg_params).astype(np.float64).T[0]])
+        scan_params_w.writerow(scan_params_fieldnames)
+        scan_params_w.writerow(row)
 
 def executeANTsMotionCorr(moving, reference, mask, output, latest_ants, containerized):
     print(f"Executing ANTS motion correction with the following inputs:\n" 
@@ -265,7 +328,7 @@ def hmcMain(input_folder : str, output_folder : str, dataset : bool, latest_ants
         for subject in all_subjects:
             sub_name = subject.split('/')[-1] if subject.split('/')[-1] != '' else subject.split('/')[-2]
             sub_num  = sub_name.split('-')[-1]
-            sub_output_folder = os.path.join(output_folder, sub_name)
+            sub_output_folder = os.path.join(output_folder, sub_name + "/new_ants")
             print(f"\n+ PROCESSING SUBJECT {sub_num} --------------------------------------------------------------+")
             moving = glob.glob(os.path.join(subject, "ses-1/func/*.nii.gz"))
             if len(moving) == 0:
