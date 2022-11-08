@@ -89,12 +89,14 @@ if [ $CONTAINERIZED == 0 ]; then
           echo "Failed to load ANTs version 2.3.1"
           exit 1
       fi
+      echo "Successfully loaded ANTs 2.3.1"
   else
       module load ANTs/2.4.0 # Reload ANTs with expected version 
       if [ $? != 0 ]; then
           echo "Failed to load ANTs version 2.4.0"
           exit 1
       fi
+      echo "Successfully loaded ANTs 2.4.0"
       # Set arguments
       ARGUMENTS="-d 3 --n-images 10 -v 1 \
                 --metric  MI[ $REFERENCE, $MOVING, 1, 32, Regular, 0.25, 1 ] \
@@ -108,11 +110,11 @@ if [ $CONTAINERIZED == 0 ]; then
   fi
 fi
 
-# antsMotionCorr $ARGUMENTS
+antsMotionCorr $ARGUMENTS
 # # Need to change motion corr stat call to calculate FD properly
-# antsMotionCorrStats -m $OUTPUT/motcorrMOCOparams.csv \
-                    # -o $OUTPUT/FD_calculations.csv \
-                    # -x $MASK \
-                    # -d $MOVING \
-                    # -s $OUTPUT/spacial_map.nii.gz \
-                    # -f 1 
+antsMotionCorrStats -m $OUTPUT/motcorrMOCOparams.csv \
+                    -o $OUTPUT/FD_calculations.csv \
+                    -x $MASK \
+                    -d $MOVING \
+                    -s $OUTPUT/spacial_map.nii.gz \
+                    -f 1 

@@ -46,7 +46,7 @@ def parseArguments():
     parser.add_argument('-d', '--dataset', action='store_true', help='Folder provided is a dataset folder following the BIDS hierarchy')
     parser.add_argument('-l', '--latest_ants', action='store_true', help='Specify to use latest install of ANTs motion correction')
     parser.add_argument('-c', '--containerized', action='store_true', help='Specify this option if we are running in a container')
-
+    
     return parser.parse_args()
 
 
@@ -123,7 +123,7 @@ def plot_3d(axes,sitk_img,fig,vmin=0,vmax=1,cmap='gray', alpha=1, cbar=False, th
             cbar_list.append(fig.colorbar(pos, ax=ax))
     return cbar_list
 
-def hmcAnalysis(moving, scan_info, output):
+def hmcAnalysis(moving, scan_info, output, mask):
     print(f"Running analysis with the following inputs:\n" 
             f" - Moving image = {moving}\n"
             f" - Scan info = {scan_info}\n"
@@ -134,12 +134,15 @@ def hmcAnalysis(moving, scan_info, output):
     temporal_features = os.path.join(output, "temporal_features.png")
     FD_csv = os.path.join(output, "FD_calculations.csv")
     fitting_params_csv = os.path.join(output, "lin_reg_params.csv")
-    bold_scan_params_csv = os.path.join(output, "bold_scan_params.csv")
+    analysis_data_csv = os.path.join(output, "analysis_data.csv")
     movparams_fieldnames = ['Euler rotation about X', 'Euler rotation about Y', 'Euler rotation about Z', 
                            'Translation in X', 'Translation in Y', 'Translation in Z']
     scan_params_fieldnames = ['Subject ID', 'Pixel Volume (mm^3)', 'Repetition Time (s)', 'Echo Time (s)', 
-                                'Drift X Rotation', 'Drift Y Rotation', 'Drift Z Rotation',
-                                'Drift X Translation', 'Drift Y Translation', 'Drift Z Translation' ]
+                                'Drift Rotation X', 'Drift Rotation Y', 'Drift Rotation Z',
+                                'Drift Translation X', 'Drift Translation Y', 'Drift Translation Z', 
+                                'Drift Framewise', 'Framewise Displacement STD', 'Mean of STD Difference', 
+                                'Algorithm Version' ]
+    warped_output = os.path.join(output, "motcorr_warped.nii.gz")
     motion_np = np.zeros((1,6)) 
     fd_np = np.zeros([0])
 
@@ -164,85 +167,113 @@ def hmcAnalysis(moving, scan_info, output):
 
         motion_np = np.transpose(motion_np)
     
-    fig,axes = plt.subplots(nrows=3, ncols=3, figsize=(30,10))
+    fig,axes = plt.subplots(nrows=3, ncols=4, figsize=(30,10))
 
     # Linear fitting of the parameters
     lin_reg_params = []
-    x = range(0, len(motion_np[0, 1:]))
+    x_1 = range(0, len(motion_np[0, 1:]))
     for mot_param in motion_np:
-        A = np.vstack([x, np.ones(len(x))]).T
+        A = np.vstack([x_1, np.ones(len(x_1))]).T
         m, c = np.linalg.lstsq(A, mot_param[1:].astype(np.float64), rcond=None)[0]
         lin_reg_params.append([m, c])
+    
+    # Linear fitting framewise displacement
+    x_2 = range(0, len(fd_np[1:]))
+    A = np.vstack([x_2, np.ones(len(x_2))]).T
+    m, c = np.linalg.lstsq(A, fd_np[1:].astype(np.float64), rcond=None)[0]
+    lin_reg_params.append([m, c])
 
     with open(fitting_params_csv, 'w') as fitting_params_fp:
         fitting_w = csv.writer(fitting_params_fp, delimiter=',', quotechar='|')
         col_names = ['Parameter', 'm', 'c']
         res = np.vstack([np.asarray(movparams_fieldnames), 
-                        np.asarray(lin_reg_params).astype(np.float64).T[0], 
-                        np.asarray(lin_reg_params).astype(np.float64).T[1]]).T
+                        np.asarray(lin_reg_params[0:6]).astype(np.float64).T[0], 
+                        np.asarray(lin_reg_params[0:6]).astype(np.float64).T[1]]).T
         fitting_w.writerow(col_names)
         for row in res:
             fitting_w.writerow(row)
+        fitting_w.writerow(['Framewise Displacement', lin_reg_params[6][0], lin_reg_params[6][1]])
     
     #Plot the Rotation and Translation parameters 
     rotations = axes[0,0]
-    rotations.plot(motion_np[0, 1:].astype(np.float64), 'g-')
-    rotations.plot(motion_np[1, 1:].astype(np.float64), 'b-')
-    rotations.plot(motion_np[2, 1:].astype(np.float64), 'm-')
-    rotations.plot(x, lin_reg_params[0][0]*x + lin_reg_params[0][1], 'g--')
-    rotations.plot(x, lin_reg_params[1][0]*x + lin_reg_params[1][1], 'b--')
-    rotations.plot(x, lin_reg_params[2][0]*x + lin_reg_params[2][1], 'm--')
+    rotations.plot(motion_np[0, 1:].astype(np.float64), color='#0099ff', linestyle='solid')
+    rotations.plot(motion_np[1, 1:].astype(np.float64), color='#ff9900', linestyle='solid')
+    rotations.plot(motion_np[2, 1:].astype(np.float64), color='#00cc00', linestyle='solid')
+    rotations.plot(x_1, lin_reg_params[0][0]*x_1 + lin_reg_params[0][1], color='#0099ff', linestyle='dashed')
+    rotations.plot(x_1, lin_reg_params[1][0]*x_1 + lin_reg_params[1][1], color='#ff9900', linestyle='dashed')
+    rotations.plot(x_1, lin_reg_params[2][0]*x_1 + lin_reg_params[2][1], color='#00cc00', linestyle='dashed')
     rotations.legend(movparams_fieldnames[0:3])
     rotations.set_title('Rotation parameters of each frame with reference to the average frame', fontsize=10, color='black')
     translations = axes[1,0]
-    translations.plot(motion_np[3, 1:].astype(np.float64), 'g-')
-    translations.plot(motion_np[4, 1:].astype(np.float64), 'b-')
-    translations.plot(motion_np[5, 1:].astype(np.float64), 'm-')
-    translations.plot(x, lin_reg_params[3][0]*x + lin_reg_params[3][1], 'g--')
-    translations.plot(x, lin_reg_params[4][0]*x + lin_reg_params[4][1], 'b--')
-    translations.plot(x, lin_reg_params[5][0]*x + lin_reg_params[5][1], 'm--')
+    translations.plot(motion_np[3, 1:].astype(np.float64), color='#0099ff', linestyle='solid')
+    translations.plot(motion_np[4, 1:].astype(np.float64), color='#ff9900', linestyle='solid')
+    translations.plot(motion_np[5, 1:].astype(np.float64), color='#00cc00', linestyle='solid')
+    translations.plot(x_1, lin_reg_params[3][0]*x_1 + lin_reg_params[3][1], color='#0099ff', linestyle='dashed')
+    translations.plot(x_1, lin_reg_params[4][0]*x_1 + lin_reg_params[4][1], color='#ff9900', linestyle='dashed')
+    translations.plot(x_1, lin_reg_params[5][0]*x_1 + lin_reg_params[5][1], color='#00cc00', linestyle='dashed')
     translations.legend(movparams_fieldnames[3:6])
     translations.set_title('Translation parameters of each frame with reference to the average frame', fontsize=10, color='black')
 
-    #Plot the FD
+    # Plot the FD
     fd = axes[2,0]
-    fd.plot(fd_np[1:].astype(np.float64))
+    fd.plot(fd_np[1:].astype(np.float64), color='#0099ff', linestyle='solid')
+    fd.plot(x_2, lin_reg_params[6][0]*x_2 + lin_reg_params[6][1], color='#0099ff', linestyle='dashed')
     fd.set_title('Framewise displacement of each frame with reference to the average frame', fontsize=10, color='black')
 
     #Calculate and plot the SNR and STD
-    img = sitk.ReadImage(moving, 8)
-    array = sitk.GetArrayFromImage(img)
-    mean = array.mean(axis=0)
-    std = array.std(axis=0)
-    std_filename = os.path.abspath('tSTD.nii.gz')
-    std_image = copyInfo_3DImage(
-        sitk.GetImageFromArray(std, isVector=False), img)
-    sitk.WriteImage(std_image, std_filename)
+    mask_img = sitk.ReadImage(mask, 8)
+    mask_arr = sitk.GetArrayFromImage(mask_img)
 
-    tSNR = np.divide(mean, std)
-    tSNR[np.isnan(tSNR)]=0
-    tSNR_filename = os.path.abspath('tSNR.nii.gz')
-    tSNR_image = copyInfo_3DImage(
-        sitk.GetImageFromArray(tSNR, isVector=False), img)
-    sitk.WriteImage(tSNR_image, tSNR_filename)
+    img_i = sitk.ReadImage(moving, 8)
+    array_i = sitk.GetArrayFromImage(img_i)
+    std_i = array_i.std(axis=0)
+    std_i_filename = os.path.join(output, 'inputSTD.nii.gz')
+    std_image_i = copyInfo_3DImage(
+        sitk.GetImageFromArray(std_i, isVector=False), img_i)
+    sitk.WriteImage(std_image_i, std_i_filename)
 
-    axes[0,1].set_title('Temporal STD', fontsize=30, color='black')
-    std=std.flatten()
-    std.sort()
-    std_vmax = std[int(len(std)*0.95)]
-    plot_3d(axes[:,1],std_image,fig=fig,vmin=0,vmax=std_vmax,cmap='inferno', cbar=True)
-    axes[0,2].set_title('Temporal SNR', fontsize=30, color='black')
-    plot_3d(axes[:,2],tSNR_image,fig=fig,vmin=0,vmax=tSNR.max(),cmap='Spectral', cbar=True)
+    img_o = sitk.ReadImage(warped_output, 8)
+    array_o = sitk.GetArrayFromImage(img_o)
+    std_o = array_o.std(axis=0)
+    std_o_filename = os.path.join(output, 'outputSTD.nii.gz')
+    std_image_o = copyInfo_3DImage(
+        sitk.GetImageFromArray(std_o, isVector=False), img_o)
+    sitk.WriteImage(std_image_o, std_o_filename)
+
+    std_diff = np.subtract(std_i, std_o)
+    mean_std_diff = np.mean(std_diff[mask_arr.astype(bool)])
+    std_diff_filename = os.path.join(output, 'diffSTD.nii.gz')
+    std_image_diff = copyInfo_3DImage(
+        sitk.GetImageFromArray(std_diff, isVector=False), img_o)
+    sitk.WriteImage(std_image_diff, std_diff_filename)
+
+    axes[0,1].set_title('Temporal STD of Input BOLD', fontsize=20, color='black')
+    std_i=std_i.flatten()
+    std_i.sort()
+    std_i_vmax = std_i[int(len(std_i)*0.95)]
+    plot_3d(axes[:,1],std_image_i,fig=fig,vmin=0,vmax=std_i_vmax,cmap='inferno', cbar=True)
+    axes[0,2].set_title('Temporal STD of Corrected Timeseries', fontsize=20, color='black')
+    std_o=std_o.flatten()
+    std_o.sort()
+    std_o_vmax = std_o[int(len(std_o)*0.95)]
+    plot_3d(axes[:,2],std_image_o,fig=fig,vmin=0,vmax=std_o_vmax,cmap='inferno', cbar=True)
+    axes[0,3].set_title('Temporal STD Difference', fontsize=20, color='black')
+    std_diff=std_diff.flatten()
+    std_diff.sort()
+    std_diff_vmax = std_diff[int(len(std_diff)*0.95)]
+    plot_3d(axes[:,3],std_image_diff,fig=fig,vmin=0,vmax=std_diff_vmax,cmap='inferno', cbar=True)
 
     fig.savefig(temporal_features)
 
     # Extract useful parameters of the initial moving timeseries
-    with open(scan_info, 'r') as scan_info_fp, open(bold_scan_params_csv, 'w') as bold_scan_params_fp:
-        scan_params_w = csv.writer(bold_scan_params_fp, delimiter=',', quotechar='|')
+    with open(scan_info, 'r') as scan_info_fp, open(analysis_data_csv, 'w') as analysis_data_fp:
+        scan_params_w = csv.writer(analysis_data_fp, delimiter=',', quotechar='|')
         moving_obj = nb.load(moving)
         xyzt_units = moving_obj.header['xyzt_units']
         space_unit = 1
         time_unit = 1
+        algo_version = 'new' if(os.path.exists(os.path.join(output, "new_ants.txt"))) else 'old'
+        fd_std = np.std(fd_np.astype(np.float64))
         NA1, xdim, ydim, zdim, tdim, NA2, NA3, NA4 = moving_obj.header['pixdim']
         if(xyzt_units & NIFTI_SPACE_MASK == NIFTI_UNITS_METER):
             space_unit = 1000
@@ -260,7 +291,8 @@ def hmcAnalysis(moving, scan_info, output):
                 xdim * space_unit * ydim * space_unit * zdim * space_unit,
                 tdim * time_unit,
                 json.load(scan_info_fp)['EchoTime'],
-                np.asarray(lin_reg_params).astype(np.float64).T[0]])
+                np.asarray(lin_reg_params).astype(np.float64).T[0],
+                fd_std, mean_std_diff, algo_version])
         scan_params_w.writerow(scan_params_fieldnames)
         scan_params_w.writerow(row)
 
@@ -295,17 +327,17 @@ def executeANTsMotionCorr(moving, reference, mask, output, latest_ants, containe
 def hmcMain(input_folder : str, output_folder : str, dataset : bool, latest_ants : bool, containerized : bool):
     if not dataset:
         moving = glob.glob(os.path.join(input_folder, "ses-1/func/*.nii.gz"))
+        mask = glob.glob(os.path.join(input_folder, f"ses-1/func/_scan_info_subject_id*/*mask.nii.gz"))
         if len(moving) == 0:
             print(f"Failed to find the moving images nifti file in subject folder ses-1/func")
             return
+        if len(mask) == 0:
+                print(f"Failed to find the mask nifti file in subject folder /ses-1/func")
+                return
         if not os.path.exists(os.path.join(output_folder, "motcorrMOCOparams.csv")):
             reference = glob.glob(os.path.join(input_folder,"ses-1/func/_scan_info_subject_id*/*ref.nii.gz"))
-            mask = glob.glob(os.path.join(input_folder, f"ses-1/func/_scan_info_subject_id*/*mask.nii.gz"))
             if len(reference) == 0:
                 print(f"Failed to find the reference nifti file in subject folder ses-1/func")
-                return
-            if len(mask) == 0:
-                print(f"Failed to find the mask nifti file in subject folder /ses-1/func")
                 return
             if not os.path.exists(output_folder):
                 os.makedirs(output_folder)
@@ -317,45 +349,46 @@ def hmcMain(input_folder : str, output_folder : str, dataset : bool, latest_ants
         if len(scan_info) == None:
                 print(f"Failed to find the scan info json file in subject folder ses-1/func")
                 return 
-        hmcAnalysis(moving[0], scan_info[0], output_folder)
+        hmcAnalysis(moving[0], scan_info[0], output_folder, mask[0])
     else:
         all_subjects = glob.glob(os.path.join(input_folder, "sub-*/"))
+        commands  = []
 
         if len(all_subjects) == 0:
             print("No subjects found in dataset. Finishing job.")
             return
-        
+
         for subject in all_subjects:
             sub_name = subject.split('/')[-1] if subject.split('/')[-1] != '' else subject.split('/')[-2]
             sub_num  = sub_name.split('-')[-1]
-            sub_output_folder = os.path.join(output_folder, sub_name + "/new_ants")
+            sub_output_folder = os.path.join(output_folder, sub_name + "/old_ants")
             print(f"\n+ PROCESSING SUBJECT {sub_num} --------------------------------------------------------------+")
             moving = glob.glob(os.path.join(subject, "ses-1/func/*.nii.gz"))
+            mask = glob.glob(os.path.join(subject, f"ses-1/func/_scan_info_subject_id{sub_num}*/*mask.nii.gz"))
             if len(moving) == 0:
                 print(f"Failed to find the moving images nifti file in subject folder {subject}/ses-1/func")
                 return 
+            if len(mask) == 0:
+                    print(f"Failed to find the mask nifti file in subject folder {subject}/ses-1/func")
+                    return
             
             if not os.path.exists(os.path.join(sub_output_folder, "motcorrMOCOparams.csv")):
                 reference = glob.glob(os.path.join(subject, f"ses-1/func/_scan_info_subject_id{sub_num}*/*ref.nii.gz"))
-                mask = glob.glob(os.path.join(subject, f"ses-1/func/_scan_info_subject_id{sub_num}*/*mask.nii.gz"))
                 if len(reference) == 0:
                     print(f"Failed to find the reference nifti file in subject folder {subject}/ses-1/func")
                     return
-                if len(mask) == 0:
-                    print(f"Failed to find the mask nifti file in subject folder {subject}/ses-1/func")
-                    return
                 if not os.path.exists(sub_output_folder):
                     os.makedirs(sub_output_folder)
-                executeANTsMotionCorr(moving[0], reference[0], mask[0], sub_output_folder, latest_ants, containerized)
+                command = executeANTsMotionCorr(moving[0], reference[0], mask[0], sub_output_folder, latest_ants, containerized)
             else:
                 print(f"Output files already present in folder {sub_output_folder}, skipping motion correction.")
             
             scan_info = glob.glob(os.path.join(subject, "ses-1/func/*.json"))
             if len(scan_info) == 0:
-                    print(f"Failed to find the scan info json file in subject folder {subject}/ses-1/func")
-                    return
-            hmcAnalysis(moving[0], scan_info[0], sub_output_folder)
-
+                print(f"Failed to find the scan info json file in subject folder {subject}/ses-1/func")
+                return
+            hmcAnalysis(moving[0], scan_info[0], sub_output_folder, mask[0])
+        
 if __name__ == "__main__":
     print("Running HMC in isolation...")
     args = parseArguments()
