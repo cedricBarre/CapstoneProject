@@ -7,6 +7,7 @@ LATEST_ANTS=0
 ARGUMENTS=""
 CONTAINERIZED=0
 MASK=""
+PERFORMANCE=0
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -33,12 +34,14 @@ while [[ $# -gt 0 ]]; do
     -l|--latest_ants)
       LATEST_ANTS=1
       shift # past argument
-      shift # past value
       ;;
     -c|--containerized)
       CONTAINERIZED=1
       shift # past argument
-      shift # past value
+      ;;
+    -p|--performance)
+      PERFORMANCE=1
+      shift # past argument
       ;;
     -*|--*)
       echo "Unknown option $1"
@@ -98,19 +101,34 @@ if [ $CONTAINERIZED == 0 ]; then
       fi
       echo "Successfully loaded ANTs 2.4.0"
       # Set arguments
-      ARGUMENTS="-d 3 --n-images 10 -v 1 \
-                --metric  MI[ $REFERENCE, $MOVING, 1, 32, Regular, 0.25, 1 ] \
-                --useFixedReferenceImage 1 \
-                --useScalesEstimator \
-                --transform Rigid[0.1] \
-                --iterations 225x75x25 \
-                --shrinkFactors 3x2x1 \
-                --smoothingSigmas 0.24022448175728997x0.14710685100747165x0.0mm \
-                --output [ $OUTPUT/motcorr, $OUTPUT/motcorr_warped.nii.gz, $OUTPUT/motcorr_avg.nii.gz ]"
+      if [ $PERFORMANCE == 0 ]; then
+          ARGUMENTS="-d 3 --n-images 10 -v 1 \
+                    --metric  MI[ $REFERENCE, $MOVING, 1, 32, Regular, 0.25, 1 ] \
+                    --useFixedReferenceImage 1 \
+                    --useScalesEstimator \
+                    --transform Rigid[0.1] \
+                    --iterations 225x75x25 \
+                    --shrinkFactors 3x2x1 \
+                    --smoothingSigmas 0.24022448175728997x0.14710685100747165x0.0mm \
+                    --output [ $OUTPUT/motcorr, $OUTPUT/motcorr_warped.nii.gz, $OUTPUT/motcorr_avg.nii.gz ]"
+      else 
+          ARGUMENTS="-d 3 --n-images 10 -v 1 \
+                    --metric  MI[ $REFERENCE, $MOVING, 1, 32, Regular, 0.25, 1 ] \
+                    --useFixedReferenceImage 1 \
+                    --useScalesEstimator \
+                    --transform Rigid[0.1] \
+                    --iterations 50x20 \
+                    --shrinkFactors 2x1 \
+                    --smoothingSigmas 0.24022448175728997x0.14710685100747165x0.0mm \
+                    --output [ $OUTPUT/motcorr, $OUTPUT/motcorr_warped.nii.gz, $OUTPUT/motcorr_avg.nii.gz ]"
+      fi
   fi
 fi
-
+START=`date +%s`
 antsMotionCorr $ARGUMENTS
+END=`date +%s`
+EXECUTION_TIME=`expr $END - $START`
+echo $EXECUTION_TIME s > $OUTPUT/execution_time.txt
 # # Need to change motion corr stat call to calculate FD properly
 antsMotionCorrStats -m $OUTPUT/motcorrMOCOparams.csv \
                     -o $OUTPUT/FD_calculations.csv \

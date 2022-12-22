@@ -5,6 +5,7 @@ INPUT=""
 OUTPUT=""
 DATASET=""
 LATEST_ANTS=""
+PERFORMANCE=""
 HELP=0
 SINGULARITY=0
 
@@ -26,6 +27,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     -l|--latest_ants)
       LATEST_ANTS="-l"
+      shift # past argument
+      ;;
+    -p|--performance)
+      PERFORMANCE="-p"
       shift # past argument
       ;;
     -s|--singularity)
@@ -74,7 +79,7 @@ if [ $SINGULARITY == 1 ]; then
                     --bind $INPUT:/mnt/input \
                     --bind $OUTPUT:/mnt/output \
                     ../../Fall2022/rabies.sif \
-                    python /mnt/HMC_isolated.py /mnt/input /mnt/output $DATASET $LATEST_ANTS -c
+                    python /mnt/HMC_isolated.py /mnt/input /mnt/output $DATASET $LATEST_ANTS $PERFORMANCE -c
 else
-    python ./HMC_isolated.py $INPUT $OUTPUT $DATASET $LATEST_ANTS
+    python ./HMC_isolated.py $INPUT $OUTPUT $DATASET $LATEST_ANTS $PERFORMANCE
 fi

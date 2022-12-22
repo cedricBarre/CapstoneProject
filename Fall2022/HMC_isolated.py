@@ -46,7 +46,8 @@ def parseArguments():
     parser.add_argument('-d', '--dataset', action='store_true', help='Folder provided is a dataset folder following the BIDS hierarchy')
     parser.add_argument('-l', '--latest_ants', action='store_true', help='Specify to use latest install of ANTs motion correction')
     parser.add_argument('-c', '--containerized', action='store_true', help='Specify this option if we are running in a container')
-    
+    parser.add_argument('-p', '--performance', action='store_true', help='Specify this option to run the performance optimized version of the new ANTs motion correction')
+
     return parser.parse_args()
 
 
@@ -218,6 +219,7 @@ def hmcAnalysis(moving, scan_info, output, mask):
     fd = axes[2,0]
     fd.plot(fd_np[1:].astype(np.float64), color='#0099ff', linestyle='solid')
     fd.plot(x_2, lin_reg_params[6][0]*x_2 + lin_reg_params[6][1], color='#0099ff', linestyle='dashed')
+    fd.set_yticks(np.arange(0, 0.03, 0.005))
     fd.set_title('Framewise displacement of each frame with reference to the average frame', fontsize=10, color='black')
 
     #Calculate and plot the SNR and STD
@@ -252,7 +254,7 @@ def hmcAnalysis(moving, scan_info, output, mask):
     std_i.sort()
     std_i_vmax = std_i[int(len(std_i)*0.95)]
     plot_3d(axes[:,1],std_image_i,fig=fig,vmin=0,vmax=std_i_vmax,cmap='inferno', cbar=True)
-    axes[0,2].set_title('Temporal STD of Corrected Timeseries', fontsize=20, color='black')
+    axes[0,2].set_title('Temporal STD of Corrected\nTimeseries', fontsize=20, color='black')
     std_o=std_o.flatten()
     std_o.sort()
     std_o_vmax = std_o[int(len(std_o)*0.95)]
@@ -296,7 +298,7 @@ def hmcAnalysis(moving, scan_info, output, mask):
         scan_params_w.writerow(scan_params_fieldnames)
         scan_params_w.writerow(row)
 
-def executeANTsMotionCorr(moving, reference, mask, output, latest_ants, containerized):
+def executeANTsMotionCorr(moving, reference, mask, output, latest_ants, containerized, performance):
     print(f"Executing ANTS motion correction with the following inputs:\n" 
             f" - Moving = {moving}\n"
             f" - Reference = {reference}\n"
@@ -314,7 +316,11 @@ def executeANTsMotionCorr(moving, reference, mask, output, latest_ants, containe
         containerized_opt = '-c'
         motcor_path = "/mnt/"
     
-    command = f"{motcor_path}antsMotCor.sh -m {moving} -r {reference} -x {mask} -o {output} {latest_ants_opt} {containerized_opt}"
+    performance_opt = ""
+    if performance:
+        performance_opt = '-p'
+    
+    command = f"{motcor_path}antsMotCor.sh -m {moving} -r {reference} -x {mask} -o {output} {latest_ants_opt} {containerized_opt} {performance_opt}"
     process = subprocess.Popen( command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True )
     while True:
         out = process.stdout.read(1)
@@ -324,7 +330,7 @@ def executeANTsMotionCorr(moving, reference, mask, output, latest_ants, containe
             sys.stdout.write(out.decode("utf-8", 'replace'))
             sys.stdout.flush()
 
-def hmcMain(input_folder : str, output_folder : str, dataset : bool, latest_ants : bool, containerized : bool):
+def hmcMain(input_folder : str, output_folder : str, dataset : bool, latest_ants : bool, containerized : bool, performance : bool):
     if not dataset:
         moving = glob.glob(os.path.join(input_folder, "ses-1/func/*.nii.gz"))
         mask = glob.glob(os.path.join(input_folder, f"ses-1/func/_scan_info_subject_id*/*mask.nii.gz"))
@@ -341,7 +347,7 @@ def hmcMain(input_folder : str, output_folder : str, dataset : bool, latest_ants
                 return
             if not os.path.exists(output_folder):
                 os.makedirs(output_folder)
-            executeANTsMotionCorr(moving[0], reference[0], mask[0], output_folder, latest_ants, containerized)
+            executeANTsMotionCorr(moving[0], reference[0], mask[0], output_folder, latest_ants, containerized, performance)
         else:
             print(f"Output files already present in folder {output_folder}, skipping motion correction.")
         
@@ -379,7 +385,7 @@ def hmcMain(input_folder : str, output_folder : str, dataset : bool, latest_ants
                     return
                 if not os.path.exists(sub_output_folder):
                     os.makedirs(sub_output_folder)
-                command = executeANTsMotionCorr(moving[0], reference[0], mask[0], sub_output_folder, latest_ants, containerized)
+                command = executeANTsMotionCorr(moving[0], reference[0], mask[0], sub_output_folder, latest_ants, containerized, performance)
             else:
                 print(f"Output files already present in folder {sub_output_folder}, skipping motion correction.")
             
@@ -393,4 +399,4 @@ if __name__ == "__main__":
     print("Running HMC in isolation...")
     args = parseArguments()
 
-    hmcMain(args.input_folder, args.output_folder, args.dataset, args.latest_ants, args.containerized)
+    hmcMain(args.input_folder, args.output_folder, args.dataset, args.latest_ants, args.containerized, args.performance)

@@ -60,51 +60,51 @@ def presentAnalysis(input_folder : str, output_folder : str):
     versions = df.groupby('Algorithm Version')
 
     # Drift plot
-    for version in ['old', 'new']:
-        fig,axes = plt.subplots(nrows=2, ncols=3, figsize=(20,5))
-        version_obj = []
-        if version in rot_versions.groups.keys():
-            rot_by_dataset = rot_versions.get_group(version).groupby('Dataset')
-            version_obj.append([rot_by_dataset, 'Rotation'])
-        if version in tran_versions.groups.keys():
-            tran_by_dataset = tran_versions.get_group(version).groupby('Dataset')
-            version_obj.append([tran_by_dataset, 'Translation'])
-        for i, param in enumerate(version_obj):
-            plot_pixvol = axes[i,0]
-            plot_pixvol.plot(param[0].get_group('rabies_7_Cryo_med_f1')['Pixel Volume (mm^3)'],
-                            param[0].get_group('rabies_7_Cryo_med_f1')[f'Drift {param[1]}'], 
-                            'o', label='rabies_7_Cryo_med_f1')
-            plot_pixvol.plot(param[0].get_group('rabies_7_Cryo_med_f2')['Pixel Volume (mm^3)'],
-                            param[0].get_group('rabies_7_Cryo_med_f2')[f'Drift {param[1]}'], 
-                            'o', label='rabies_7_Cryo_med_f2')
-            plot_pixvol.legend()
-            plot_pixvol.set_title(f'Estimated {param[1]} drift according to pixel volume', fontsize=10, color='black')
-            plot_pixvol.set_xlabel('Pixel Volume (mm^3)')
-            plot_pixvol.set_ylabel(f'{param[1]} Drift Magnitude')
-            plot_rep_time = axes[i,1]
-            plot_rep_time.plot(param[0].get_group('rabies_7_Cryo_med_f1')['Repetition Time (s)'],
-                            param[0].get_group('rabies_7_Cryo_med_f1')[f'Drift {param[1]}'], 
-                            'o', label='rabies_7_Cryo_med_f1')
-            plot_rep_time.plot(param[0].get_group('rabies_7_Cryo_med_f2')['Repetition Time (s)'],
-                            param[0].get_group('rabies_7_Cryo_med_f2')[f'Drift {param[1]}'], 
-                            'o', label='rabies_7_Cryo_med_f2')
-            plot_rep_time.legend()
-            plot_rep_time.set_title(f'Estimated {param[1]} drift according to repetition time', fontsize=10, color='black')
-            plot_rep_time.set_xlabel('Repetition Time (s)')
-            plot_rep_time.set_ylabel(f'{param[1]} Drift Magnitude')
-            plot_echo_time = axes[i,2]
-            plot_echo_time.plot(param[0].get_group('rabies_7_Cryo_med_f1')['Echo Time (s)'],
-                            param[0].get_group('rabies_7_Cryo_med_f1')[f'Drift {param[1]}'], 
-                            'o', label='rabies_7_Cryo_med_f1')
-            plot_echo_time.plot(param[0].get_group('rabies_7_Cryo_med_f2')['Echo Time (s)'],
-                            param[0].get_group('rabies_7_Cryo_med_f2')[f'Drift {param[1]}'], 
-                            'o', label='rabies_7_Cryo_med_f2')
-            plot_echo_time.legend()
-            plot_echo_time.set_title(f'Estimated {param[1]} drift according to echo time', fontsize=10, color='black')
-            plot_echo_time.set_xlabel('Echo Time (s)')
-            plot_echo_time.set_ylabel(f'{param[1]} Drift Magnitude')
-        fig.tight_layout()
-        fig.savefig(os.path.join(output_folder, f"drift_plots_{version}_ants.png"))
+    # for version in ['old', 'new']:
+    #     fig,axes = plt.subplots(nrows=2, ncols=3, figsize=(20,5))
+    #     version_obj = []
+    #     if version in rot_versions.groups.keys():
+    #         rot_by_dataset = rot_versions.get_group(version).groupby('Dataset')
+    #         version_obj.append([rot_by_dataset, 'Rotation'])
+    #     if version in tran_versions.groups.keys():
+    #         tran_by_dataset = tran_versions.get_group(version).groupby('Dataset')
+    #         version_obj.append([tran_by_dataset, 'Translation'])
+    #     for i, param in enumerate(version_obj):
+    #         plot_pixvol = axes[i,0]
+    #         plot_pixvol.plot(param[0].get_group('rabies_7_Cryo_med_f1')['Pixel Volume (mm^3)'],
+    #                         param[0].get_group('rabies_7_Cryo_med_f1')[f'Drift {param[1]}'], 
+    #                         'o', label='rabies_7_Cryo_med_f1')
+    #         plot_pixvol.plot(param[0].get_group('rabies_7_Cryo_med_f2')['Pixel Volume (mm^3)'],
+    #                         param[0].get_group('rabies_7_Cryo_med_f2')[f'Drift {param[1]}'], 
+    #                         'o', label='rabies_7_Cryo_med_f2')
+    #         plot_pixvol.legend()
+    #         plot_pixvol.set_title(f'Estimated {param[1]} drift according to pixel volume', fontsize=10, color='black')
+    #         plot_pixvol.set_xlabel('Pixel Volume (mm^3)')
+    #         plot_pixvol.set_ylabel(f'{param[1]} Drift Magnitude')
+    #         plot_rep_time = axes[i,1]
+    #         plot_rep_time.plot(param[0].get_group('rabies_7_Cryo_med_f1')['Repetition Time (s)'],
+    #                         param[0].get_group('rabies_7_Cryo_med_f1')[f'Drift {param[1]}'], 
+    #                         'o', label='rabies_7_Cryo_med_f1')
+    #         plot_rep_time.plot(param[0].get_group('rabies_7_Cryo_med_f2')['Repetition Time (s)'],
+    #                         param[0].get_group('rabies_7_Cryo_med_f2')[f'Drift {param[1]}'], 
+    #                         'o', label='rabies_7_Cryo_med_f2')
+    #         plot_rep_time.legend()
+    #         plot_rep_time.set_title(f'Estimated {param[1]} drift according to repetition time', fontsize=10, color='black')
+    #         plot_rep_time.set_xlabel('Repetition Time (s)')
+    #         plot_rep_time.set_ylabel(f'{param[1]} Drift Magnitude')
+    #         plot_echo_time = axes[i,2]
+    #         plot_echo_time.plot(param[0].get_group('rabies_7_Cryo_med_f1')['Echo Time (s)'],
+    #                         param[0].get_group('rabies_7_Cryo_med_f1')[f'Drift {param[1]}'], 
+    #                         'o', label='rabies_7_Cryo_med_f1')
+    #         plot_echo_time.plot(param[0].get_group('rabies_7_Cryo_med_f2')['Echo Time (s)'],
+    #                         param[0].get_group('rabies_7_Cryo_med_f2')[f'Drift {param[1]}'], 
+    #                         'o', label='rabies_7_Cryo_med_f2')
+    #         plot_echo_time.legend()
+    #         plot_echo_time.set_title(f'Estimated {param[1]} drift according to echo time', fontsize=10, color='black')
+    #         plot_echo_time.set_xlabel('Echo Time (s)')
+    #         plot_echo_time.set_ylabel(f'{param[1]} Drift Magnitude')
+    #     fig.tight_layout()
+    #     fig.savefig(os.path.join(output_folder, f"drift_plots_{version}_ants.png"))
     
     # Framewise displacement drift according to version
     fig,axes = plt.subplots(nrows=1, ncols=2, figsize=(20,5))
@@ -118,16 +118,16 @@ def presentAnalysis(input_folder : str, output_folder : str):
     p = axes[0]
     for data in version_data:
         p.hist(data, bins=30)
-    p.set_title(f'Distribution of framewise displacement across subjects according to the ANTs version', fontsize=15, color='black')
-    p.set_xlabel('Framewise displacement drift')
-    p.set_ylabel('Count')
+    p.set_title(f'Distribution of framewise displacement slope\nacross subjects according to the ANTs version', fontsize=18, color='black')
+    p.set_xlabel('Framewise displacement\nslope', fontsize=18)
+    p.set_ylabel('Count', fontsize=18)
     p.legend(version_name)
     p = axes[1]
     p.boxplot(version_data)
-    p.set_xticklabels(version_name)
-    p.set_title('Boxplot of framewise displacement across subjects according to the ANTs version', fontsize=15, color='black')
-    p.set_ylabel('Framewise displacement drift')
-    p.set_xlabel('ANTs version')
+    p.set_xticklabels(version_name, fontsize=18)
+    p.set_title('Boxplot of framewise displacement slope\nacross subjects according to the ANTs version', fontsize=18, color='black')
+    p.set_ylabel('Framewise displacement\nslope', fontsize=18)
+    p.set_xlabel('ANTs version', fontsize=18)
     fig.tight_layout()
     fig.savefig(os.path.join(output_folder, "drift_comparison.png"))
 
@@ -143,16 +143,16 @@ def presentAnalysis(input_folder : str, output_folder : str):
     p = axes[0]
     for data in version_data:
         p.hist(data, bins=30)
-    p.set_title(f'Distribution of the mean for the difference in STD between pre and post correction\nscans across subjects according to the ANTs version', fontsize=15, color='black')
-    p.set_xlabel('Mean for the difference in STD')
-    p.set_ylabel('Count')
+    p.set_title(f'Distribution of the mean for the difference in STD between pre and\npost correction scans across subjects according to the ANTs version', fontsize=18, color='black')
+    p.set_xlabel('Mean for the difference in STD', fontsize=18)
+    p.set_ylabel('Count', fontsize=18)
     p.legend(version_name)
     p = axes[1]
     p.boxplot(version_data)
-    p.set_xticklabels(version_name)
-    p.set_title('Boxplot of the mean for the difference in STD between pre and post correction\nscans across subjects according to the ANTs version', fontsize=15, color='black')
-    p.set_ylabel('Mean for the difference in STD')
-    p.set_xlabel('ANTs version')
+    p.set_xticklabels(version_name, fontsize=18)
+    p.set_title('Boxplot of the mean for the difference in STD between pre and\npost correction scans across subjects according to the ANTs version', fontsize=18, color='black')
+    p.set_ylabel('Mean for the difference in STD', fontsize=18)
+    p.set_xlabel('ANTs version', fontsize=18)
     fig.tight_layout()
     fig.savefig(os.path.join(output_folder, "real_motion_comparison.png"))
 
@@ -168,16 +168,16 @@ def presentAnalysis(input_folder : str, output_folder : str):
     p = axes[0]
     for data in version_data:
         p.hist(data, bins=30)
-    p.set_title(f'Distribution of framewise displacement spread across subjects according to the ANTs version', fontsize=15, color='black')
-    p.set_xlabel('Framewise displacement spread')
-    p.set_ylabel('Count')
+    p.set_title(f'Distribution of framewise displacement spread\nacross subjects according to the ANTs version', fontsize=18, color='black')
+    p.set_xlabel('Framewise displacement\nspread', fontsize=18)
+    p.set_ylabel('Count', fontsize=18)
     p.legend(version_name)
     p = axes[1]
     p.boxplot(version_data)
-    p.set_xticklabels(version_name)
-    p.set_title('Boxplot of framewise displacement spread across subjects according to the ANTs version', fontsize=15, color='black')
-    p.set_ylabel('Framewise displacement spread')
-    p.set_xlabel('ANTs version')
+    p.set_xticklabels(version_name, fontsize=18)
+    p.set_title('Boxplot of framewise displacement spread\nacross subjects according to the ANTs version', fontsize=18, color='black')
+    p.set_ylabel('Framewise displacement\nspread', fontsize=18)
+    p.set_xlabel('ANTs version', fontsize=18)
     fig.tight_layout()
     fig.savefig(os.path.join(output_folder, "fake_high_motion_comparison.png"))
 
