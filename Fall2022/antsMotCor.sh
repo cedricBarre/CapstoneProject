@@ -119,7 +119,7 @@ if [ $CONTAINERIZED == 0 ]; then
                     --transform Rigid[0.1] \
                     --iterations 50x20 \
                     --shrinkFactors 2x1 \
-                    --smoothingSigmas 0.24022448175728997x0.14710685100747165x0.0mm \
+                    --smoothingSigmas 0.14710685100747165x0.0mm \
                     --output [ $OUTPUT/motcorr, $OUTPUT/motcorr_warped.nii.gz, $OUTPUT/motcorr_avg.nii.gz ]"
       fi
   fi

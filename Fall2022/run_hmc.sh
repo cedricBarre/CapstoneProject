@@ -6,8 +6,11 @@ OUTPUT=""
 DATASET=""
 LATEST_ANTS=""
 PERFORMANCE=""
+BATCH=""
 HELP=0
 SINGULARITY=0
+SUBFOLDER=""
+CONTAINER=""
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -25,6 +28,10 @@ while [[ $# -gt 0 ]]; do
       DATASET="-d"
       shift # past argument
       ;;
+    -b|--batch)
+      BATCH="-b"
+      shift # past argument
+      ;;
     -l|--latest_ants)
       LATEST_ANTS="-l"
       shift # past argument
@@ -33,9 +40,16 @@ while [[ $# -gt 0 ]]; do
       PERFORMANCE="-p"
       shift # past argument
       ;;
-    -s|--singularity)
+    -c|--containerized)
       SINGULARITY=1
+      CONTAINER="$2"
       shift # past argument
+      shift # past value
+      ;;
+    -s|--subfolder)
+      SUBFOLDER="-s $2"
+      shift # past argument
+      shift # past value
       ;;
     -h|--help)
       HELP=1
@@ -56,10 +70,10 @@ done
 if [ $HELP == 1 ]; then
   if [ $SINGULARITY == 1 ]; then 
       singularity exec --bind ./HMC_isolated.py:/mnt/HMC_isolated.py \
-                      ../../Fall2022/rabies.sif \
-                      python /mnt/HMC_isolated.py -h
+                      $CONTAINER \
+                      python3 /mnt/HMC_isolated.py -h
   else
-      python ./HMC_isolated.py -h
+      python3 ./HMC_isolated.py -h
   fi
   exit 0
 fi
@@ -78,8 +92,8 @@ if [ $SINGULARITY == 1 ]; then
                     --bind ./antsMotCor.sh:/mnt/antsMotCor.sh \
                     --bind $INPUT:/mnt/input \
                     --bind $OUTPUT:/mnt/output \
-                    ../../Fall2022/rabies.sif \
-                    python /mnt/HMC_isolated.py /mnt/input /mnt/output $DATASET $LATEST_ANTS $PERFORMANCE -c
+                    $CONTAINER \
+                    python3 /mnt/HMC_isolated.py /mnt/input /mnt/output $DATASET $LATEST_ANTS $PERFORMANCE $BATCH -c $SUBFOLDER
 else
-    python ./HMC_isolated.py $INPUT $OUTPUT $DATASET $LATEST_ANTS $PERFORMANCE
+    python3 ./HMC_isolated.py $INPUT $OUTPUT $DATASET $LATEST_ANTS $PERFORMANCE $BATCH $SUBFOLDER
 fi

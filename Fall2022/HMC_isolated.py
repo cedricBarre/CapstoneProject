@@ -32,22 +32,17 @@ def parseArguments():
     parser.add_argument('input_folder', 
                         help="Input folder containing the subject to process. The folder can also be a dataset following\n"
                              "the BIDS hierarchy with the fMRI data of each subject. If the folder is a dataset, specify\n"
-                             "the -d parameter. Each subject folder should respect the following format:\n"
-                             "   sub-0XX\n"
-                             "   └── ses-1\n"
-                             "       └── func\n"
-                             "           ├── _scan_info_subject_id0XX.session1.runNone_split_name_sub-0XX_ses-1_task-rest_acq-EPI_bold\n"
-                             "           │   └── sub-0XX_ses-1_task-rest_acq-EPI_bold_bold_ref.nii.gz\n"
-                             "           ├── sub-0XX_ses-1_func_sub-0XX_ses-1_task-rest_acq-EPI_bold.json\n"
-                             "           └── sub-0XX_ses-1_task-rest_acq-EPI_bold.nii.gz\n"
-                             "Here, XX represents the number of the subject\n")
+                             "the -d parameter. Consult the README for an example of the folder structure.")
     parser.add_argument('output_folder', 
                         help='Output folder')
     parser.add_argument('-d', '--dataset', action='store_true', help='Folder provided is a dataset folder following the BIDS hierarchy')
-    parser.add_argument('-l', '--latest_ants', action='store_true', help='Specify to use latest install of ANTs motion correction')
-    parser.add_argument('-c', '--containerized', action='store_true', help='Specify this option if we are running in a container')
+    
     parser.add_argument('-p', '--performance', action='store_true', help='Specify this option to run the performance optimized version of the new ANTs motion correction')
-
+    parser.add_argument('-b', '--batch', action='store_true', help='Specify this option to run the processing in batch mode on the CIC')
+    parser.add_argument('-l', '--latest_ants', action='store_true', help='Specify to use latest install of ANTs motion correction')
+    parser.add_argument('-c', '--containerized', action='store_true', help='Specify this option if we are running in a container. This argument must also be followed by the path to container to use.')
+    parser.add_argument('-s', nargs='?', default=None, const=None, help='Option to specify the subfolder in which to store the output for each subject in a dataset')
+    
     return parser.parse_args()
 
 
@@ -298,12 +293,7 @@ def hmcAnalysis(moving, scan_info, output, mask):
         scan_params_w.writerow(scan_params_fieldnames)
         scan_params_w.writerow(row)
 
-def executeANTsMotionCorr(moving, reference, mask, output, latest_ants, containerized, performance):
-    print(f"Executing ANTS motion correction with the following inputs:\n" 
-            f" - Moving = {moving}\n"
-            f" - Reference = {reference}\n"
-            f" - Mask = {mask}\n"
-            f" - Output folder = {output}")
+def executeANTsMotionCorr(subjects, latest_ants : bool, containerized : bool, performance : bool, batch : bool):
     
     motcor_path = './'
 
@@ -320,42 +310,103 @@ def executeANTsMotionCorr(moving, reference, mask, output, latest_ants, containe
     if performance:
         performance_opt = '-p'
     
-    command = f"{motcor_path}antsMotCor.sh -m {moving} -r {reference} -x {mask} -o {output} {latest_ants_opt} {containerized_opt} {performance_opt}"
-    process = subprocess.Popen( command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True )
-    while True:
-        out = process.stdout.read(1)
-        if process.poll() != None:
-            break
-        if out != '':
-            sys.stdout.write(out.decode("utf-8", 'replace'))
-            sys.stdout.flush()
+    if batch:
+        with open("batch_cmds.sh", 'w') as batch_file:
+            for subject in subjects:
+                if not os.path.exists(os.path.join(subject["output"], "motcorrMOCOparams.csv")):
+                    if not os.path.exists(subject["output"]):
+                        os.makedirs(subject["output"])
+                else:
+                    print(f"Output files already present in folder {subject['output']}, skipping motion correction.")
+                    continue
 
-def hmcMain(input_folder : str, output_folder : str, dataset : bool, latest_ants : bool, containerized : bool, performance : bool):
+                command = (f'echo ANTS motion correction was executed with the following inputs: >> {subject["output"]}/info.txt &&' 
+                           f'echo - Moving = {subject["moving"]} >> {subject["output"]}/info.txt && ' 
+                           f'echo - Reference = {subject["reference"]} >> {subject["output"]}/info.txt && ' 
+                           f'echo - Mask = {subject["mask"]} >> {subject["output"]}/info.txt && ' 
+                           f'echo - Output folder = {subject["output"]} > {subject["output"]}/info.txt && ' 
+                           f'{motcor_path}antsMotCor.sh -m {subject["moving"]} -r {subject["reference"]} -x {subject["mask"]} ' 
+                           f'-o {subject["output"]} {latest_ants_opt} {containerized_opt} {performance_opt}\n')
+                batch_file.write(command)
+        
+        execution_cmd = "./launch_batch.sh"
+        process = subprocess.Popen( execution_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True )
+        while True:
+            out = process.stdout.read(1)
+            if process.poll() != None:
+                break
+            if out != '':
+                sys.stdout.write(out.decode("utf-8", 'replace'))
+                sys.stdout.flush()
+        
+        os.remove("batch_cmds.sh")
+
+        for subject in subjects:
+            hmcAnalysis(subject["moving"], subject["scan_info"], subject["output"], subject["mask"])
+    
+    else:
+        for subject in subjects:
+            skip_to_analysis = False
+            print(f'Executing ANTS motion correction with the following inputs:\n'
+                  f'   - Moving = {subject["moving"]}\n'
+                  f'   - Reference = {subject["reference"]}\n'
+                  f'   - Mask = {subject["mask"]}\n'
+                  f'   - Output folder = {subject["output"]}')
+            
+            if not os.path.exists(os.path.join(subject["output"], "motcorrMOCOparams.csv")):
+                if not os.path.exists(subject["output"]):
+                    os.makedirs(subject["output"])
+            else:
+                print(f"Output files already present in folder {subject['output']}, skipping motion correction.")
+                skip_to_analysis = True
+
+            if not skip_to_analysis:
+                if latest_ants:
+                    open(os.path.join(subject["output"], "new_ants.txt"), 'w').close()
+                else:
+                    if os.path.exists(os.path.join(subject["output"], "new_ants.txt")):
+                        os.remove(os.path.join(subject["output"], "new_ants.txt"))
+                
+                command = f"{motcor_path}antsMotCor.sh -m {subject['moving']} -r {subject['reference']} -x {subject['mask']} -o {subject['output']} {latest_ants_opt} {containerized_opt} {performance_opt}"
+                process = subprocess.Popen( command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True )
+                while True:
+                    out = process.stdout.read(1)
+                    if process.poll() != None:
+                        break
+                    if out != '':
+                        sys.stdout.write(out.decode("utf-8", 'replace'))
+                        sys.stdout.flush()
+            
+            hmcAnalysis(subject["moving"], subject["scan_info"], subject["output"], subject["mask"])
+
+def hmcMain(input_folder : str, output_folder : str, dataset : bool, latest_ants : bool, containerized : bool, performance : bool, subfolder : str, batch : bool):
+    subjects_to_process = []
+    
     if not dataset:
+        # Check that all required files are present
         moving = glob.glob(os.path.join(input_folder, "ses-1/func/*.nii.gz"))
         mask = glob.glob(os.path.join(input_folder, f"ses-1/func/_scan_info_subject_id*/*mask.nii.gz"))
-        if len(moving) == 0:
-            print(f"Failed to find the moving images nifti file in subject folder ses-1/func")
-            return
-        if len(mask) == 0:
-                print(f"Failed to find the mask nifti file in subject folder /ses-1/func")
-                return
-        if not os.path.exists(os.path.join(output_folder, "motcorrMOCOparams.csv")):
-            reference = glob.glob(os.path.join(input_folder,"ses-1/func/_scan_info_subject_id*/*ref.nii.gz"))
-            if len(reference) == 0:
-                print(f"Failed to find the reference nifti file in subject folder ses-1/func")
-                return
-            if not os.path.exists(output_folder):
-                os.makedirs(output_folder)
-            executeANTsMotionCorr(moving[0], reference[0], mask[0], output_folder, latest_ants, containerized, performance)
-        else:
-            print(f"Output files already present in folder {output_folder}, skipping motion correction.")
-        
         scan_info = glob.glob(os.path.join(input_folder, "ses-1/func/*.json"))
         if len(scan_info) == None:
                 print(f"Failed to find the scan info json file in subject folder ses-1/func")
                 return 
-        hmcAnalysis(moving[0], scan_info[0], output_folder, mask[0])
+        if len(moving) == 0:
+            print(f"Failed to find the moving images nifti file in subject folder ses-1/func")
+            return
+        if len(mask) == 0:
+            print(f"Failed to find the mask nifti file in subject folder /ses-1/func")
+            return
+        reference = glob.glob(os.path.join(input_folder,"ses-1/func/_scan_info_subject_id*/*ref.nii.gz"))
+        if len(reference) == 0:
+            print(f"Failed to find the reference nifti file in subject folder ses-1/func")
+            return
+        # If all is present, add subject to the list
+        subjects_to_process.append({"output"    : output_folder, 
+                                    "moving"    : moving[0],
+                                    "mask"      : mask[0], 
+                                    "scan_info" : scan_info[0], 
+                                    "reference" : reference[0]})
+        
     else:
         all_subjects = glob.glob(os.path.join(input_folder, "sub-*/"))
         commands  = []
@@ -365,38 +416,49 @@ def hmcMain(input_folder : str, output_folder : str, dataset : bool, latest_ants
             return
 
         for subject in all_subjects:
+            # Get output folder and subject ID
             sub_name = subject.split('/')[-1] if subject.split('/')[-1] != '' else subject.split('/')[-2]
             sub_num  = sub_name.split('-')[-1]
-            sub_output_folder = os.path.join(output_folder, sub_name + "/old_ants")
-            print(f"\n+ PROCESSING SUBJECT {sub_num} --------------------------------------------------------------+")
+            sub_output_folder = os.path.join(output_folder, sub_name + "/" + subfolder)
+            
+            # Check that all required files are present
             moving = glob.glob(os.path.join(subject, "ses-1/func/*.nii.gz"))
             mask = glob.glob(os.path.join(subject, f"ses-1/func/_scan_info_subject_id{sub_num}*/*mask.nii.gz"))
+            scan_info = glob.glob(os.path.join(subject, "ses-1/func/*.json"))
+            reference = glob.glob(os.path.join(subject, f"ses-1/func/_scan_info_subject_id{sub_num}*/*ref.nii.gz"))
+            if len(reference) == 0:
+                print(f"Failed to find the reference nifti file in subject folder {subject}/ses-1/func")
+                return
+            if len(scan_info) == 0:
+                print(f"Failed to find the scan info json file in subject folder {subject}/ses-1/func")
+                return
             if len(moving) == 0:
                 print(f"Failed to find the moving images nifti file in subject folder {subject}/ses-1/func")
                 return 
             if len(mask) == 0:
                     print(f"Failed to find the mask nifti file in subject folder {subject}/ses-1/func")
                     return
+            # If all is present, add subject to the list
+            subjects_to_process.append({"output"    : sub_output_folder, 
+                                        "moving"    : moving[0],
+                                        "mask"      : mask[0], 
+                                        "scan_info" : scan_info[0], 
+                                        "reference" : reference[0]})
             
-            if not os.path.exists(os.path.join(sub_output_folder, "motcorrMOCOparams.csv")):
-                reference = glob.glob(os.path.join(subject, f"ses-1/func/_scan_info_subject_id{sub_num}*/*ref.nii.gz"))
-                if len(reference) == 0:
-                    print(f"Failed to find the reference nifti file in subject folder {subject}/ses-1/func")
-                    return
-                if not os.path.exists(sub_output_folder):
-                    os.makedirs(sub_output_folder)
-                command = executeANTsMotionCorr(moving[0], reference[0], mask[0], sub_output_folder, latest_ants, containerized, performance)
-            else:
-                print(f"Output files already present in folder {sub_output_folder}, skipping motion correction.")
-            
-            scan_info = glob.glob(os.path.join(subject, "ses-1/func/*.json"))
-            if len(scan_info) == 0:
-                print(f"Failed to find the scan info json file in subject folder {subject}/ses-1/func")
-                return
-            hmcAnalysis(moving[0], scan_info[0], sub_output_folder, mask[0])
+    executeANTsMotionCorr(subjects_to_process, latest_ants, containerized, performance, batch)
         
 if __name__ == "__main__":
     print("Running HMC in isolation...")
     args = parseArguments()
-
-    hmcMain(args.input_folder, args.output_folder, args.dataset, args.latest_ants, args.containerized, args.performance)
+    print(args) 
+    subfolder = ''
+    if(args.s != None):
+        subfolder = args.s
+    hmcMain(args.input_folder, 
+            args.output_folder, 
+            args.dataset, 
+            args.latest_ants, 
+            args.containerized, 
+            args.performance, 
+            subfolder,
+            args.batch)
