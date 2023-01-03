@@ -30,7 +30,16 @@ You are now ready to run the processing scripts on the CIC! If you are running o
 
 ## Visualization Tool
 
-Write instructions here...
+The animation.py script was created for users to be able to create an animation of different fMRI. Having access to these animation is quite important to be able to distinguish real and fake head motion. The script animates 4 slices for each of the 3 views of the scans for 3 to 4 seconds.
+
+### Head Motion Correction Processing Script
+
+To run the visualisation tool processing script [animation.py], the user must specify the input folder, the otuput folder and one optional command line argument. The optional command line argument is describe below
+
+| Argument            | Type     | Value                      |
+|---------------------|----------|----------------------------|
+| -d or --dataset     | Optional | No value required. Specifying this option on the command line tells the script that a full dataset will be processed. Omiting this option tells the script that a single subject will be processed. |
+
 
 ## Running the Isolated Head Motion Correction
 
