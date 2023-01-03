@@ -28,19 +28,6 @@ conda activate hmc_env
 
 You are now ready to run the processing scripts on the CIC! If you are running on the singularity of docker, you do not have to create this environment since all the required packages are already installed within the RABIES container.
 
-## Visualization Tool
-
-The animation.py script was created for users to be able to create an animation of different fMRI. Having access to these animation is quite important to be able to distinguish real and fake head motion. The script animates 4 slices for each of the 3 views of the scans for 3 to 4 seconds.
-
-### Head Motion Correction Processing Script
-
-To run the visualisation tool processing script [animation.py], the user must specify the input folder, the otuput folder and one optional command line argument. The optional command line argument is describe below
-
-| Argument            | Type     | Value                      |
-|---------------------|----------|----------------------------|
-| -d or --dataset     | Optional | No value required. Specifying this option on the command line tells the script that a full dataset will be processed. Omiting this option tells the script that a single subject will be processed. |
-
-
 ## Running the Isolated Head Motion Correction
 
 The [run_hmc.sh](run_hmc.sh) script was created for users to be able to execute the head motion correction algorithm from the ANTs software toolkit in isolation and provide some quality control similar to what is done in the RABIES pipeline. The processing also includes the analysis of the 3 main motion types of interest for our project: real motion, drift motion and high unrealistic motion. The script characterizes the presence of these types motions in each scan it processes and stores the results in a CSV file in the output folder. This information can then be used by a subsequent analysis script ([combined_analysis.py](combined_analysis.py)) which can collect all the output data files from all the scans processed within a directory and create relevant plots to compare the performance of two different ANTs toolkit versions. Let us start with the description of how to use the processing script.
@@ -153,3 +140,30 @@ The script only takes in two required arguments: the input folder and the output
 ```
 python combined_analysis.py -h
 ```
+
+## Running the Visualization Tool
+
+The [animation.py script](animation.py) was created for users to be able to create an animation of different fMRI. Having access to these animation is quite important to be able to distinguish real and fake head motion. The script animates 4 slices for each of the 3 views of the scans for 3 to 4 seconds.
+
+### Head Motion Correction Processing Script
+
+To run the visualisation tool processing script [animation.py], the user must specify the input folder, the otuput folder and one optional command line argument. The optional command line argument is describe below
+
+| Argument            | Type     | Value                      |
+|---------------------|----------|----------------------------|
+| -i or --input       | Required | Relative or absolute path to the folder containing the input data. |
+| -o or --output      | Required | Relative or absolute path to the folder into which the output data will be stored. |
+| -d or --dataset     | Optional | No value required. Specifying this option on the command line tells the script that a full dataset will be processed. Omiting this option tells the script that a single subject will be processed. |
+
+The file structure should follow the framework described above for the "Head Motion Correction Processing Script". Here are two exemples on how to run the script.
+
+* Running script on CIC for single subject
+
+```
+python3 ./animation.py <input-file> <output-file> 
+```
+
+```
+python3 ./animation.py <input-file> <output-file> -d
+```
+
